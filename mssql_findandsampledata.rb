@@ -84,7 +84,8 @@ class Metasploit3 < Msf::Auxiliary
 		#DEFINE SEARCH QUERY AS VARIABLE
 		sql = "
 		-- CHECK IF VERSION IS COMPATABLE > than 2000
-		IF (SELECT SUBSTRING(CAST(SERVERPROPERTY('ProductVersion') as VARCHAR), 1, CHARINDEX('.',cast(SERVERPROPERTY('ProductVersion') as VARCHAR),1)-1)) >	8
+		IF (SELECT SUBSTRING(CAST(SERVERPROPERTY('ProductVersion') as VARCHAR), 1, 
+		CHARINDEX('.',cast(SERVERPROPERTY('ProductVersion') as VARCHAR),1)-1)) > 8
 		BEGIN
 			
 			-- TURN OFF ROW COUNT
@@ -177,23 +178,33 @@ class Metasploit3 < Msf::Auxiliary
 			--------------------------------------------------------------------
 			-- CHECK IF ANY NON-DEFAULT DATABASE EXIST
 			--------------------------------------------------------------------
-			IF (SELECT count(*) FROM master..sysdatabases WHERE name NOT IN ('master','tempdb','model','msdb') and HAS_DBACCESS(name) <> 0) <> 0 
+			IF (SELECT count(*) 
+			FROM master..sysdatabases 
+			WHERE name NOT IN ('master','tempdb','model','msdb') 
+			and HAS_DBACCESS(name) <> 0) <> 0 
 			BEGIN
 				DECLARE MY_CURSOR1 CURSOR
 				FOR
 
-				SELECT name FROM master..sysdatabases WHERE name NOT IN ('master','tempdb','model','msdb') and HAS_DBACCESS(name) <> 0;
+				SELECT name FROM master..sysdatabases 
+				WHERE name NOT IN ('master','tempdb','model','msdb') 
+				and HAS_DBACCESS(name) <> 0;
 
 				OPEN MY_CURSOR1
 				FETCH NEXT FROM MY_CURSOR1 INTO @var1
 				WHILE @@FETCH_STATUS = 0   
 				BEGIN  	
-				------------------------------------------------------------------------------------------------
-				-- SEARCH FOR KEYWORDS and INSERT AFFECTEED SERVER/DATABASE/SCHEMA/TABLE/COLUMN INTO MYTABLE			
-				------------------------------------------------------------------------------------------------
+				---------------------------------------------------
+				-- SEARCH FOR KEYWORDS/INSERT RESULTS INTO MYTABLE			
+				---------------------------------------------------
 				SET @var2 = ' 	
 				INSERT INTO ##mytable
-				SELECT @@SERVERNAME as SERVER_NAME,TABLE_CATALOG as DATABASE_NAME,TABLE_SCHEMA,TABLE_NAME,COLUMN_NAME,DATA_TYPE
+				SELECT @@SERVERNAME as SERVER_NAME,
+				TABLE_CATALOG as DATABASE_NAME,
+				TABLE_SCHEMA,
+				TABLE_NAME,
+				COLUMN_NAME,
+				DATA_TYPE
 				FROM ['+@var1+'].[INFORMATION_SCHEMA].[COLUMNS] WHERE '
 				
 				--APPEND KEYWORDS TO QUERY
@@ -234,7 +245,12 @@ class Metasploit3 < Msf::Auxiliary
 						FROM ##mytable
 
 							OPEN MY_CURSOR2
-							FETCH NEXT FROM MY_CURSOR2 INTO @var_server,@var_database,@var_table_schema,@var_table,@var_column,@var_column_data_type
+							FETCH NEXT FROM MY_CURSOR2 INTO @var_server,
+							@var_database,
+							@var_table_schema,
+							@var_table,
+							@var_column,
+							@var_column_data_type
 							WHILE @@FETCH_STATUS = 0   
 							BEGIN  
 							----------------------------------------------------------------------
