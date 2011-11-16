@@ -1,5 +1,5 @@
 ##
-# $Id: mssql_FindandSampleData.rb  9653 2011-11-15 23:33:07Z nullbind $
+# $Id: mssql_FindandSampleData.rb 2011-11-15 nullbind $
 ##
 
 ##
@@ -49,8 +49,8 @@ class Metasploit3 < Msf::Auxiliary
 			OUTPUTPATH option is set.
 			},
 			'Author'         => [ 'Scot Sutherland (nullbind) <scott.sutherland@netspi.com>' ],
-			'Version'        => '$Revision: 1 $',		
-			'References'     => [[ 'URL', 'http://www.netspi.com/blog/author/ssutherland/' ]],			
+			'Version'        => '$Revision: 1 $',
+			'References'     => [[ 'URL', 'http://www.netspi.com/blog/author/ssutherland/' ]],
 			'Targets'        => [[ 'MSSQL 2005', { 'ver' => 2005 }]]
 		))
 
@@ -363,26 +363,26 @@ class Metasploit3 < Msf::Auxiliary
 		SET NOCOUNT OFF;"
 		
 		#STATUSING
-		puts " " 
-		puts "[*] STATUS: Attempting to connect to the remote SQL Server at #{rhost}..."
+		print_line(" ")
+		print_line("[*] STATUS: Attempting to connect to the remote SQL Server at #{rhost}...")
 		
 		#CREATE DATABASE CONNECTION AND SUBMIT QUERY WITH ERROR HANDLING
 		begin
 			result = mssql_query(sql, false) if mssql_login_datastore
 			column_data = result[:rows]
-			puts "[*] STATUS: Connected to the remote SQL Server."			
+			print_line("[*] STATUS: Connected to the remote SQL Server.")			
 			rescue
-			puts "[-] ERROR : Connection to #{rhost} failed."  
+			print_line("[-] ERROR : Connection to #{rhost} failed.")
 			return
 		end
 
 		#STATUSING		
-		puts "[*] STATUS: Attempting to retrieve data from the SQL Server..."
+		print_line("[*] STATUS: Attempting to retrieve data from the SQL Server...")
 				
 		if (column_data.count < 7) 
 			#Return error from SQL server
 			column_data.each { |row|
-				puts "[*] STATUS: #{row.to_s.gsub("[","").gsub("]","").gsub("\"","")}"
+				print_line("[*] STATUS: #{row.to_s.gsub("[","").gsub("]","").gsub("\"","")}")
 			}
 		return
 		else
@@ -392,7 +392,7 @@ class Metasploit3 < Msf::Auxiliary
 					row[col] = row[col].strip.to_s	
 					}		
 			}
-			puts " "
+			print_line(" ")
 		end
 						
 		#SETUP ROW WIDTHS
@@ -450,9 +450,9 @@ class Metasploit3 < Msf::Auxiliary
 		
 		#CHECK IF QUERY OUTPUT WAS WRITTEN TO THE FILE
 		if File.exist?(opt_outputpath) 
-			puts "[*] The query output from #{rhost} has been written to: #{opt_outputpath}"
+			print_line("[*] The query output from #{rhost} has been written to: #{opt_outputpath}")
 		else
-			puts "[*] The query output from #{rhost} was NOT written to a file."
+			print_line("[*] The query output from #{rhost} was NOT written to a file.")
 		end
 		
 
