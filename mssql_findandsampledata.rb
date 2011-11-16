@@ -50,6 +50,7 @@ class Metasploit3 < Msf::Auxiliary
 			},
 			'Author'         => [ 'Scot Sutherland (nullbind) <scott.sutherland@netspi.com>' ],
 			'Version'        => '$Revision: 1 $',
+			'License'        => MSF_LICENSE,
 			'References'     => [[ 'URL', 'http://www.netspi.com/blog/author/ssutherland/' ]],
 			'Targets'        => [[ 'MSSQL 2005', { 'ver' => 2005 }]]
 		))
@@ -438,7 +439,7 @@ class Metasploit3 < Msf::Auxiliary
 			}
 			print_line(buffer1)
 			
-			# Write query output to the defined file path (currently Windows Only)
+			# Write query output to the defined file path 
 			# Note: This will overwrite existing files
 			File.open(opt_outputpath, 'a') do |myfile| myfile.puts(buffer2.chomp(",")) 
 			end if (opt_ouput.downcase == "yes" and opt_outputpath.downcase != "")
