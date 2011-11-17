@@ -413,7 +413,8 @@ class Metasploit3 < Msf::Auxiliary
 				buffer2 += row[col]+ ","
 			}
 			print_line(buffer1)	
-			File.open(opt_outputpath, 'ab') do |myfile| myfile.puts(buffer2.chomp(",")) 
+			buffer2 = buffer2.chomp(",")+ "\n"	 
+			File.open(opt_outputpath, 'ab') do |myfile| myfile.print(buffer2) 		
 			end if (opt_ouput.downcase == "yes" and opt_outputpath.downcase != "")			
 		}
 		
@@ -438,10 +439,10 @@ class Metasploit3 < Msf::Auxiliary
 				buffer2 += row[col] + ","
 			}
 			print_line(buffer1)
-			
+			buffer2 = buffer2.chomp(",")+ "\n"	
 			# Write query output to the defined file path 
 			# Note: This will overwrite existing files
-			File.open(opt_outputpath, 'ab') do |myfile| myfile.puts(buffer2.chomp(",")) 
+			File.open(opt_outputpath, 'ab') do |myfile| myfile.print(buffer2) 
 			end if (opt_ouput.downcase == "yes" and opt_outputpath.downcase != "")
 			buffer1 = ""
 			buffer2 = ""
