@@ -49,7 +49,7 @@ class Metasploit3 < Msf::Auxiliary
 			OUTPUTPATH option is set.
 			},
 			'Author'         => [ 'Scot Sutherland (nullbind) <scott.sutherland@netspi.com>' ],
-			'Version'        => '$Revision: 1 $',
+			'Version'        => '$Revision: 12196 $',
 			'License'        => MSF_LICENSE,
 			'References'     => [[ 'URL', 'http://www.netspi.com/blog/author/ssutherland/' ]],
 			'Targets'        => [[ 'MSSQL 2005', { 'ver' => 2005 }]]
@@ -365,20 +365,20 @@ class Metasploit3 < Msf::Auxiliary
 		
 		#STATUSING
 		print_line(" ")
-		print_line("[*] STATUS: Attempting to connect to the remote SQL Server at #{rhost}...")
+		print_line("[*] STATUS: Attempting to connect to the SQL Server at #{rhost}:#{rport}...")
 		
 		#CREATE DATABASE CONNECTION AND SUBMIT QUERY WITH ERROR HANDLING
 		begin
 			result = mssql_query(sql, false) if mssql_login_datastore
 			column_data = result[:rows]
-			print_line("[*] STATUS: Connected to the remote SQL Server.")			
+			print_line("[*] STATUS: Connected to #{rhost}:#{rport} successfully.")			
 			rescue
-			print_line("[-] ERROR : Connection to #{rhost} failed.")
+			print_line("[-] ERROR : Connection to #{rhost}:#{rport} failed.")
 			return
 		end
 
 		#STATUSING		
-		print_line("[*] STATUS: Attempting to retrieve data from the SQL Server...")
+		print_line("[*] STATUS: Attempting to retrieve data ...")
 				
 		if (column_data.count < 7) 
 			#Return error from SQL server
@@ -413,7 +413,7 @@ class Metasploit3 < Msf::Auxiliary
 				buffer2 += row[col]+ ","
 			}
 			print_line(buffer1)	
-			File.open(opt_outputpath, 'a') do |myfile| myfile.puts(buffer2.chomp(",")) 
+			File.open(opt_outputpath, 'ab') do |myfile| myfile.puts(buffer2.chomp(",")) 
 			end if (opt_ouput.downcase == "yes" and opt_outputpath.downcase != "")			
 		}
 		
@@ -441,7 +441,7 @@ class Metasploit3 < Msf::Auxiliary
 			
 			# Write query output to the defined file path 
 			# Note: This will overwrite existing files
-			File.open(opt_outputpath, 'a') do |myfile| myfile.puts(buffer2.chomp(",")) 
+			File.open(opt_outputpath, 'ab') do |myfile| myfile.puts(buffer2.chomp(",")) 
 			end if (opt_ouput.downcase == "yes" and opt_outputpath.downcase != "")
 			buffer1 = ""
 			buffer2 = ""
