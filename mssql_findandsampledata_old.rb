@@ -1,3 +1,33 @@
+##
+# $Id: mssql_FindandSampleData.rb 2011-11-15 nullbind $
+##
+
+##
+#  Credits: 
+#  Thank you Dijininja for your original IDF 
+#  module.  Also, thank you  humble-desser and DarkOperator
+#  helping me work through a few critical issues.
+##
+
+## 
+#  Use Case:
+#  This script will search through all of the non-default 
+#  databases on the SQL Server for columns that match the 
+#  keywords defined in the TSQL KEYWORDS option. If column 
+#  names are found that match the defined keywords and 
+#  data is present in the associated tables, the script 
+#  will select a sample of the records from each 
+#  of the affected tables.  The sample size is determined
+#  by the SAMPLESIZE option.  Also, the results can be written to a
+#  CSV file if the OUTPUT is set to "yes" and an OUTPUTPATH option is set.
+#
+#  This script is valuable for gathering evidence during PCI
+#  penetration tests and could even be used during the PCI 
+#  data dicovery process.
+#
+#  Important note: This script only works on SQL Server 2005 and 2008
+##
+
 require 'msf/core'
 
 
@@ -14,14 +44,12 @@ class Metasploit3 < Msf::Auxiliary
 			on the SQL Server for columns that match the keywords defined in the TSQL KEYWORDS 
 			option. If column names are found that match the defined keywords and data is present 
 			in the associated tables, the script will select a sample of the records from each of 
-			the affected tables.  The sample size is determined by the SAMPLE_SIZE option, and results
-			output in a CSV format.  
-			
-			Thank you Dijininja for the IDF module which was my inspiration 
-			for this.  Also, thank you humble-desser, DarkOperator, HDM, and especially todb for 
-			helping me refine this MSF Module.
+			the affected tables.  The sample size is determined by the SAMPLESIZE option.  Also, 
+			the results can be written to a CSV file if the OUTPUT is set to "yes" and the 
+			OUTPUTPATH option is set.
 			},
-			'Author'         => [ 'Scott Sutherland (nullbind) <scott.sutherland@netspi.com>' ],
+			'Author'         => [ 'Scot Sutherland (nullbind) <scott.sutherland@netspi.com>' ],
+			'Version'        => '$Revision: 12196 $',
 			'License'        => MSF_LICENSE,
 			'References'     => [[ 'URL', 'http://www.netspi.com/blog/author/ssutherland/' ]],
 			'Targets'        => [[ 'MSSQL 2005', { 'ver' => 2005 }]]
@@ -30,7 +58,9 @@ class Metasploit3 < Msf::Auxiliary
 		register_options(
 			[
 				OptString.new('KEYWORDS', [ true, 'Keywords to search for','passw|credit|card']),
-				OptInt.new('SAMPLE_SIZE', [ true, 'Number of rows to sample',  '1']),			
+				OptString.new('SAMPLESIZE', [ true, 'Number of rows to sample',  '1']),
+				OptString.new('OUTPUT', [ false, 'Generate CSV file from search results',  'no']),
+				OptString.new('OUTPUTPATH', [ false, 'File output path (C:\\\filename.csv)',  '']),
 			], self.class)
 	end
 
@@ -39,11 +69,13 @@ class Metasploit3 < Msf::Auxiliary
 		print_line("=" * str.length)
 	end
 
-	def run_host(ip)		
-		sql_statement()
-	end
+	def run_host(ip)
 	
-	def sql_statement()
+		#SETUP PRETTY OPTION VARIABLES FOR LATER USE		
+		opt_sample = datastore['SAMPLESIZE']
+		opt_ouput = datastore['OUTPUT']
+		opt_outputpath = datastore['OUTPUTPATH']
+		opt_keywords = datastore['KEYWORDS']
 	
 		#DEFINED HEADER TEXT
 		headings = [
@@ -52,9 +84,9 @@ class Metasploit3 < Msf::Auxiliary
 
 		#DEFINE SEARCH QUERY AS VARIABLE
 		sql = "
-		-- CHECK IF VERSION IS COMPATABLE = > than 2000
+		-- CHECK IF VERSION IS COMPATABLE > than 2000
 		IF (SELECT SUBSTRING(CAST(SERVERPROPERTY('ProductVersion') as VARCHAR), 1, 
-		CHARINDEX('.',cast(SERVERPROPERTY('ProductVersion') as VARCHAR),1)-1)) > 0
+		CHARINDEX('.',cast(SERVERPROPERTY('ProductVersion') as VARCHAR),1)-1)) > 8
 		BEGIN
 			
 			-- TURN OFF ROW COUNT
@@ -62,19 +94,19 @@ class Metasploit3 < Msf::Auxiliary
 			--------------------------------------------------
 			-- SETUP UP SAMPLE SIZE
 			--------------------------------------------------
-			DECLARE @SAMPLE_COUNT varchar(800);
-			SET @SAMPLE_COUNT = '#{datastore['SAMPLE_SIZE']}';
+			DECLARE @SAMPLE_COUNT varchar(MAX);
+			SET @SAMPLE_COUNT = #{opt_sample};
 
 			--------------------------------------------------
 			-- SETUP KEYWORDS TO SEARCH
 			--------------------------------------------------
-			DECLARE @KEYWORDS varchar(800);	
-			SET @KEYWORDS = '#{datastore['KEYWORDS']}|';
+			DECLARE @KEYWORDS varchar(MAX);	
+			SET @KEYWORDS = '#{opt_keywords}|';
 			
 			--------------------------------------------------
 			--SETUP WHERE STATEMENT CONTAINING KEYWORDS
 			--------------------------------------------------
-			DECLARE @SEARCH_TERMS varchar(800);	
+			DECLARE @SEARCH_TERMS varchar(MAX);	
 			SET @SEARCH_TERMS = ''; -- Leave this blank
 
 			-- START WHILE LOOP HERE -- BEGIN TO ITTERATE THROUGH KEYWORDS
@@ -83,7 +115,7 @@ class Metasploit3 < Msf::Auxiliary
 					BEGIN
 						--SET VARIABLES UP FOR PARSING PROCESS
 						DECLARE @change int
-						DECLARE @keyword varchar(800)
+						DECLARE @keyword varchar(MAX)
 							
 						--SET KEYWORD CHANGE TRACKER
 						SELECT @change = CHARINDEX('|',@KEYWORDS); 		
@@ -110,12 +142,12 @@ class Metasploit3 < Msf::Auxiliary
 			IF OBJECT_ID('tempdb..##mytable') IS NULL 
 			BEGIN 
 				CREATE TABLE ##mytable (
-					server_name varchar(800),
-					database_name varchar(800),
-					table_schema varchar(800),
-					table_name varchar(800),		
-					column_name varchar(800),
-					column_data_type varchar(800)
+					server_name varchar(MAX),
+					database_name varchar(MAX),
+					table_schema varchar(MAX),
+					table_name varchar(MAX),		
+					column_name varchar(MAX),
+					column_data_type varchar(MAX)
 				) 
 			END
 
@@ -123,14 +155,14 @@ class Metasploit3 < Msf::Auxiliary
 			IF OBJECT_ID('tempdb..##mytable2') IS NULL 
 			BEGIN 
 				CREATE TABLE ##mytable2 (
-					server_name varchar(800),
-					database_name varchar(800),
-					table_schema varchar(800),
-					table_name varchar(800),
-					column_name varchar(800),
-					column_data_type varchar(800),
-					column_value varchar(800),
-					column_data_row_count varchar(800)
+					server_name varchar(MAX),
+					database_name varchar(MAX),
+					table_schema varchar(MAX),
+					table_name varchar(MAX),
+					column_name varchar(MAX),
+					column_data_type varchar(MAX),
+					column_value varchar(MAX),
+					column_data_row_count varchar(MAX)
 				) 
 			END
 
@@ -141,8 +173,8 @@ class Metasploit3 < Msf::Auxiliary
 			--------------------------------------------------
 
 			-- SETUP SOME VARIABLES FOR THE MYCURSOR1
-			DECLARE @var1 varchar(800);
-			DECLARE @var2 varchar(800);
+			DECLARE @var1 varchar(max);
+			DECLARE @var2 varchar(max);
 
 			--------------------------------------------------------------------
 			-- CHECK IF ANY NON-DEFAULT DATABASE EXIST
@@ -177,7 +209,7 @@ class Metasploit3 < Msf::Auxiliary
 				FROM ['+@var1+'].[INFORMATION_SCHEMA].[COLUMNS] WHERE '
 				
 				--APPEND KEYWORDS TO QUERY
-				DECLARE @fullquery varchar(800);
+				DECLARE @fullquery VARCHAR(MAX);
 				SET @fullquery = @var2+@SEARCH_TERMS;				
 					
 				EXEC(@fullquery);	
@@ -199,14 +231,14 @@ class Metasploit3 < Msf::Auxiliary
 					END
 				ELSE
 					BEGIN			
-						DECLARE @var_server varchar(800)
-						DECLARE @var_database varchar(800)
-						DECLARE @var_table varchar(800)
-						DECLARE @var_table_schema varchar(800)
-						DECLARE @var_column_data_type varchar(800)
-						DECLARE @var_column varchar(800)
-						DECLARE @myquery varchar(800)
-						DECLARE @var_column_data_row_count varchar(800)
+						DECLARE @var_server varchar(max)
+						DECLARE @var_database varchar(max)
+						DECLARE @var_table varchar(max)
+						DECLARE @var_table_schema varchar(max)
+						DECLARE @var_column_data_type varchar(max)
+						DECLARE @var_column varchar(max)
+						DECLARE @myquery varchar(max)
+						DECLARE @var_column_data_row_count varchar(MAX)
 						
 						DECLARE MY_CURSOR2 CURSOR
 						FOR
@@ -226,12 +258,12 @@ class Metasploit3 < Msf::Auxiliary
 							-- ADD AFFECTED SERVER/SCHEMA/TABLE/COLUMN/DATATYPE/SAMPLE DATA TO MYTABLE2
 							----------------------------------------------------------------------
 							-- GET COUNT
-							DECLARE @mycount_query as varchar(800);
-							DECLARE @mycount as varchar(800);
+							DECLARE @mycount_query as varchar(MAX);
+							DECLARE @mycount as varchar(MAX);
 
 							-- CREATE TEMP TABLE TO GET THE COLUMN DATA ROW COUNT
 							IF OBJECT_ID('tempdb..#mycount') IS NOT NULL DROP TABLE #mycount
-							CREATE TABLE #mycount(mycount varchar(800));
+							CREATE TABLE #mycount(mycount VARCHAR(MAX));
 							
 							-- SETUP AND EXECUTE THE COLUMN DATA ROW COUNT QUERY
 							SET @mycount_query = 'INSERT INTO #mycount SELECT DISTINCT 
@@ -327,49 +359,35 @@ class Metasploit3 < Msf::Auxiliary
 		else
 		BEGIN
 			SELECT 'This module only works on SQL Server 2005 and above.';
-		END	
+		END
 		
 		SET NOCOUNT OFF;"
 		
-				
-			
 		#STATUSING
 		print_line(" ")
-		print_status("Attempting to connect to the SQL Server at #{rhost}:#{rport}...")
+		print_line("[*] STATUS: Attempting to connect to the SQL Server at #{rhost}:#{rport}...")
 		
 		#CREATE DATABASE CONNECTION AND SUBMIT QUERY WITH ERROR HANDLING
 		begin
 			result = mssql_query(sql, false) if mssql_login_datastore
 			column_data = result[:rows]
-			print_status("Successfully connected to #{rhost}:#{rport}")			
-		rescue
-			print_status ("Failed to connect to #{rhost}:#{rport}.")
-		return
-		end	
-		
-		#CREATE TABLE TO STORE SQL SERVER DATA LOOT
-		sql_data_tbl = Rex::Ui::Text::Table.new(
-			'Header'  => 'SQL Server Data',
-			'Ident'   => 1,
-			'Columns' => ['Server', 'Database', 'Schema', 'Table', 'Column', 'Data Type', 'Sample Data', 'Row Count']
-		)	
-		
+			print_line("[*] STATUS: Connected to #{rhost}:#{rport} successfully.")			
+			rescue
+			print_line("[-] ERROR : Connection to #{rhost}:#{rport} failed.")
+			return
+		end
+
 		#STATUSING		
-		print_status("Attempting to retrieve data ...")
-					
+		print_line("[*] STATUS: Attempting to retrieve data ...")
+				
 		if (column_data.count < 7) 
-			#Save loot status
-			save_loot="no"
-			
 			#Return error from SQL server
 			column_data.each { |row|
-				print_status("#{row.to_s.gsub("[","").gsub("]","").gsub("\"","")}")
+				print_line("[*] STATUS: #{row.to_s.gsub("[","").gsub("]","").gsub("\"","")}")
 			}
 		return
 		else
-			#SETUP COLUM WIDTH FOR QUERY RESULTS
-			#Save loot status
-			save_loot="yes"
+			#Setup column width for standard query results
 			column_data.each { |row|
 				0.upto(7) { |col|
 					row[col] = row[col].strip.to_s	
@@ -386,7 +404,7 @@ class Metasploit3 < Msf::Auxiliary
 			}
 		}		
 		
-		#PRINT HEADERS		
+		#PRINT HEADERS
 		buffer1 = ""
 		buffer2 = ""
 		headings.each { |row|
@@ -395,7 +413,9 @@ class Metasploit3 < Msf::Auxiliary
 				buffer2 += row[col]+ ","
 			}
 			print_line(buffer1)	
-			buffer2 = buffer2.chomp(",")+ "\n"	 		
+			buffer2 = buffer2.chomp(",")+ "\n"	 
+			File.open(opt_outputpath, 'ab') do |myfile| myfile.print(buffer2) 		
+			end if (opt_ouput.downcase == "yes" and opt_outputpath.downcase != "")			
 		}
 		
 		#PRINT DIVIDERS
@@ -408,7 +428,7 @@ class Metasploit3 < Msf::Auxiliary
 			}
 			print_line(buffer1)				
 		}
-		
+
 		#PRINT DATA
 		buffer1 = ""
 		buffer2 = ""		
@@ -420,33 +440,23 @@ class Metasploit3 < Msf::Auxiliary
 			}
 			print_line(buffer1)
 			buffer2 = buffer2.chomp(",")+ "\n"	
-			
-			#WRITE QUERY OUTPUT TO TEMP REPORT TABLE
-			sql_data_tbl << [row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7]] 
-					
+			# Write query output to the defined file path 
+			# Note: This will overwrite existing files
+			File.open(opt_outputpath, 'ab') do |myfile| myfile.print(buffer2) 
+			end if (opt_ouput.downcase == "yes" and opt_outputpath.downcase != "")
 			buffer1 = ""
 			buffer2 = ""
 			print_line(buffer1)						
 		}
 		disconnect	
-			
-		this_service = nil
-		if framework.db and framework.db.active
-			this_service = report_service(
-				:host  => rhost,
-				:port => rport,
-				:name => 'mssql',
-				:proto => 'tcp'
-			)
-		end
-			
-		#CONVERT TABLE TO CSV AND WRITE TO FILE
-		if (save_loot=="yes")
-			filename= "#{datastore['RHOST']}-#{datastore['RPORT']}_sqlserver_query_results.csv"
-			path = store_loot("mssql.data", "text/plain", datastore['RHOST'], sql_data_tbl.to_csv, filename, "SQL Server query results",this_service)
-			print_status("Query results have been saved to: #{path}")
-		end		
 		
-	end	
-	
+		#CHECK IF QUERY OUTPUT WAS WRITTEN TO THE FILE
+		if File.exist?(opt_outputpath) 
+			print_line("[*] The query output from #{rhost} has been written to: #{opt_outputpath}")
+		else
+			print_line("[*] The query output from #{rhost} was NOT written to a file.")
+		end
+		
+
+	end
 end
