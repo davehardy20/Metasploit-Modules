@@ -1,10 +1,10 @@
 /* ================================================
- Filename: FindDataByKeyword_v1.3.sql
- Date: 09/29/2011
+ Filename: FindDataByKeyword_v1.4.sql
+ Date: 06/28/2012
  Author: Scott Sutherland
  Email: scott.sutherland@netspi.com
 -----------------------------------------
- Description: 
+Description: 
 This script will search through all of the non-default 
 databases on the SQL Server for columns that match the 
 keywords defined in the “WHERE” clause.  If columns 
@@ -14,7 +14,7 @@ will select a sample of up to five records from each
 of the affected tables. For more information please 
 refer to the comments in the script.  
 
-Note: This only works on SQL Server 2k5 and 2k8 
+Note: This only works on SQL Server 2000, 2k5 and 2k8 
 
  The basic logic in this script includes
  the following:
@@ -29,8 +29,8 @@ Note: This only works on SQL Server 2k5 and 2k8
    column containing interesting data.
 ================================================ */
 
--- CHECK IF VERSION IS COMPATABLE > than 2000
-		IF (SELECT SUBSTRING(CAST(SERVERPROPERTY('ProductVersion') as VARCHAR), 1, CHARINDEX('.',cast(SERVERPROPERTY('ProductVersion') as VARCHAR),1)-1)) >	8
+-- CHECK IF VERSION IS COMPATABLE => than 2000
+		IF (SELECT SUBSTRING(CAST(SERVERPROPERTY('ProductVersion') as VARCHAR), 1, CHARINDEX('.',cast(SERVERPROPERTY('ProductVersion') as VARCHAR),1)-1)) >	0
 		BEGIN
 			
 			-- TURN OFF ROW COUNT
@@ -38,19 +38,19 @@ Note: This only works on SQL Server 2k5 and 2k8
 			--------------------------------------------------
 			-- SETUP UP SAMPLE SIZE
 			--------------------------------------------------
-			DECLARE @SAMPLE_COUNT varchar(MAX);
+			DECLARE @SAMPLE_COUNT varchar(800);
 			SET @SAMPLE_COUNT = 1;
 
 			--------------------------------------------------
 			-- SETUP KEYWORDS TO SEARCH
 			--------------------------------------------------
-			DECLARE @KEYWORDS varchar(MAX);	
+			DECLARE @KEYWORDS varchar(800);	
 			SET @KEYWORDS = 'pass|credit|ssn|';
 			
 			--------------------------------------------------
 			--SETUP WHERE STATEMENT CONTAINING KEYWORDS
 			--------------------------------------------------
-			DECLARE @SEARCH_TERMS varchar(MAX);	
+			DECLARE @SEARCH_TERMS varchar(800);	
 			SET @SEARCH_TERMS = ''; -- Leave this blank
 
 			-- START WHILE LOOP HERE -- BEGIN TO ITTERATE THROUGH KEYWORDS
@@ -59,7 +59,7 @@ Note: This only works on SQL Server 2k5 and 2k8
 					BEGIN
 						--SET VARIABLES UP FOR PARSING PROCESS
 						DECLARE @change int
-						DECLARE @keyword varchar(MAX)
+						DECLARE @keyword varchar(800)
 							
 						--SET KEYWORD CHANGE TRACKER
 						SELECT @change = CHARINDEX('|',@KEYWORDS); 		
@@ -87,12 +87,12 @@ Note: This only works on SQL Server 2k5 and 2k8
 			IF OBJECT_ID('tempdb..##mytable') IS NULL 
 			BEGIN 
 				CREATE TABLE ##mytable (
-					server_name varchar(MAX),
-					database_name varchar(MAX),
-					table_schema varchar(MAX),
-					table_name varchar(MAX),		
-					column_name varchar(MAX),
-					column_data_type varchar(MAX)
+					server_name varchar(800),
+					database_name varchar(800),
+					table_schema varchar(800),
+					table_name varchar(800),		
+					column_name varchar(800),
+					column_data_type varchar(800)
 				) 
 			END
 
@@ -100,14 +100,14 @@ Note: This only works on SQL Server 2k5 and 2k8
 			IF OBJECT_ID('tempdb..##mytable2') IS NULL 
 			BEGIN 
 				CREATE TABLE ##mytable2 (
-					server_name varchar(MAX),
-					database_name varchar(MAX),
-					table_schema varchar(MAX),
-					table_name varchar(MAX),
-					column_name varchar(MAX),
-					column_data_type varchar(MAX),
-					column_value varchar(MAX),
-					column_data_row_count varchar(MAX)
+					server_name varchar(800),
+					database_name varchar(800),
+					table_schema varchar(800),
+					table_name varchar(800),
+					column_name varchar(800),
+					column_data_type varchar(800),
+					column_value varchar(800),
+					column_data_row_count varchar(800)
 				) 
 			END
 
@@ -118,8 +118,8 @@ Note: This only works on SQL Server 2k5 and 2k8
 			--------------------------------------------------
 
 			-- SETUP SOME VARIABLES FOR THE MYCURSOR1
-			DECLARE @var1 varchar(max);
-			DECLARE @var2 varchar(max);
+			DECLARE @var1 varchar(800);
+			DECLARE @var2 varchar(800);
 
 			--------------------------------------------------------------------
 			-- CHECK IF ANY NON-DEFAULT DATABASE EXIST
@@ -144,7 +144,7 @@ Note: This only works on SQL Server 2k5 and 2k8
 				FROM ['+@var1+'].[INFORMATION_SCHEMA].[COLUMNS] WHERE '
 				
 				--APPEND KEYWORDS TO QUERY
-				DECLARE @fullquery VARCHAR(MAX);
+				DECLARE @fullquery varchar(800);
 				SET @fullquery = @var2+@SEARCH_TERMS;				
 					
 				EXEC(@fullquery);	
@@ -167,14 +167,14 @@ Note: This only works on SQL Server 2k5 and 2k8
 					END
 				ELSE
 					BEGIN			
-						DECLARE @var_server varchar(max)
-						DECLARE @var_database varchar(max)
-						DECLARE @var_table varchar(max)
-						DECLARE @var_table_schema varchar(max)
-						DECLARE @var_column_data_type varchar(max)
-						DECLARE @var_column varchar(max)
-						DECLARE @myquery varchar(max)
-						DECLARE @var_column_data_row_count varchar(MAX)
+						DECLARE @var_server varchar(800)
+						DECLARE @var_database varchar(800)
+						DECLARE @var_table varchar(800)
+						DECLARE @var_table_schema varchar(800)
+						DECLARE @var_column_data_type varchar(800)
+						DECLARE @var_column varchar(800)
+						DECLARE @myquery varchar(800)
+						DECLARE @var_column_data_row_count varchar(800)
 						
 						DECLARE MY_CURSOR2 CURSOR
 						FOR
@@ -188,12 +188,12 @@ Note: This only works on SQL Server 2k5 and 2k8
 							-- ADD AFFECTED SERVER/SCHEMA/TABLE/COLUMN/DATATYPE/SAMPLE DATA TO MYTABLE2
 							----------------------------------------------------------------------
 							-- GET COUNT
-							DECLARE @mycount_query as varchar(MAX);
-							DECLARE @mycount as varchar(MAX);
+							DECLARE @mycount_query as varchar(800);
+							DECLARE @mycount as varchar(800);
 
 							-- CREATE TEMP TABLE TO GET THE COLUMN DATA ROW COUNT
 							IF OBJECT_ID('tempdb..#mycount') IS NOT NULL DROP TABLE #mycount
-							CREATE TABLE #mycount(mycount VARCHAR(MAX));
+							CREATE TABLE #mycount(mycount varchar(800));
 							
 							-- SETUP AND EXECUTE THE COLUMN DATA ROW COUNT QUERY
 							SET @mycount_query = 'INSERT INTO #mycount SELECT DISTINCT 
