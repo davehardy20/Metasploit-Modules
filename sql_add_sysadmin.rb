@@ -28,6 +28,9 @@ class Metasploit3 < Msf::Post
 				OptString.new('DB_PASSWORD',  [true, 'Password for new sysadmin login', '']),
 			], self.class)
 	end
+	
+	# TODO
+	# - forward sql server error message to output
 
 	def run
 		
@@ -211,3 +214,4 @@ class Metasploit3 < Msf::Post
 		return res
 	end
 end
+
