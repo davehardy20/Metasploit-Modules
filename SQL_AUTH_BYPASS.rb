@@ -17,7 +17,8 @@ class Metasploit3 < Msf::Post
 				
 				This is possible because LocalSystem has syadmin privileges in all 
 				versions of SQL Server (2k8 and prior) by default in order to manage 
-				SQL Server patches.},
+				SQL Server patches.  This may also work on SQL 2012, but I haven't
+				tested it yet.},
 				'License'       => MSF_LICENSE,
 				'Author'        => [ 'Scott Sutherland <scott.sutherland@netspi.com>'],
 				'Platform'      => [ 'Windows' ],
@@ -53,7 +54,7 @@ class Metasploit3 < Msf::Post
 		if system_status[0]			
 			print_good("Obtained LocalSystem privileges")
 			
-			# Check if the SQL Server service is running
+			# Check if a SQL Server service is running
 			print_status("Checking for SQL Server...") if verbose == "true"
 			sqlinstance = check_for_sqlserver()			
 			if sqlinstance != 0
@@ -97,7 +98,7 @@ class Metasploit3 < Msf::Post
 				
 				# Display local instance
 				instance = service.gsub(/SQL Server \(/, "").gsub(/\)/, "").lstrip.rstrip
-				print_good("SQL Server intance found: #{instance}")				
+				print_good("SQL Server service instance found: #{instance}")				
 				return 1
 			end
 		end		
@@ -225,7 +226,8 @@ class Metasploit3 < Msf::Post
 	end
 		
 	# Method for executing cmd and returning the response
-	# Note: This is from one of Jabra's modules
+	# Note: This is from one of Jabra's modules - Thanks man!
+	# Warning: This doesn't want to work for me on Win2k systems.
 	def run_cmd(cmd,token=true)
 		opts = {'Hidden' => true, 'Channelized' => true, 'UseThreadToken' => token}
 		process = session.sys.process.execute(cmd, nil, opts)
