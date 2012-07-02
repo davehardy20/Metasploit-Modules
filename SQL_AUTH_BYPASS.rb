@@ -15,10 +15,9 @@ class Metasploit3 < Msf::Post
 				login to the local SQL Server using native SQL clients and stored
 				procedures.  If no intance is specified the default will be used.  
 				
-				This is possible because LocalSystem has syadmin privileges in all 
-				versions of SQL Server (2k8 and prior) by default in order to manage 
-				SQL Server patches.  This may also work on SQL 2012, but I haven't
-				tested it yet.},
+				This is possible because LocalSystem has syadmin privileges in SQL Server 
+				by default in order to manage SQL Server patches.  This has been tested
+				in SQL Server 2000. 2005, 2008, and 2012.},
 				'License'       => MSF_LICENSE,
 				'Author'        => [ 'Scott Sutherland <scott.sutherland@netspi.com>'],
 				'Platform'      => [ 'Windows' ],
