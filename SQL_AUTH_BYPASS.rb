@@ -29,6 +29,7 @@ class Metasploit3 < Msf::Post
 			[
 				OptString.new('DB_USERNAME',  [true, 'New sysadmin login', '']),
 				OptString.new('DB_PASSWORD',  [true, 'Password for new sysadmin login', '']),
+				OptString.new('_INSTANCE',  [false, 'Name of target SQL Server instance', '']),
 				OptBool.new('_REMOVE_LOGIN',  [false, 'Remove DB_USERNAME login from database', 'false']),
 				OptBool.new('_VERBOSE',  [false, 'Set how verbose the output should be', 'false']),
 			], self.class)
@@ -40,8 +41,11 @@ class Metasploit3 < Msf::Post
 
 	def run
 			
-		# Set Verbosity level
+		# Set verbosity level
 		verbose = datastore['_verbose'].to_s.downcase 
+		
+		# Set instance name (if specified)
+		instance = datastore['_instance'].to_s.upcase
 		
 		# Display target
 		print_status("Running module against #{sysinfo['Computer']}")	
@@ -54,7 +58,7 @@ class Metasploit3 < Msf::Post
 			
 			# Check if a SQL Server service is running
 			print_status("Checking for SQL Server...") if verbose == "true"
-			sqlinstance = check_for_sqlserver()			
+			sqlinstance = check_for_sqlserver(instance)			
 			if sqlinstance != 0
 								
 				# Identify available native SQL client
@@ -90,7 +94,7 @@ class Metasploit3 < Msf::Post
 	
 	
 	## Method to check if the SQL Server service is running
-	def check_for_sqlserver
+	def check_for_sqlserver(instance)
 	
 		# Get Data
 		running_services = run_cmd("net start")	
@@ -99,18 +103,33 @@ class Metasploit3 < Msf::Post
 		services_array = running_services.split("\n")		
 		
 		# Check for the SQL Server service
-		services_array.each do |service|
-			if service =~ /SQL Server \(| MSSQLSERVER/ then 
+		services_array.each do |service|		
+			if instance == "" then			
+				# Target default instance
+				if service =~ /SQL Server \(| MSSQLSERVER/ then 					
+					# Display results
+					service_instance = service.gsub(/SQL Server \(/, "").gsub(/\)/, "").lstrip.rstrip
+					print_good("SQL Server service found: #{service_instance}")				
+					return 1
+				end
+			else
+			
+				# Target user defined instance
+				if service =~ /#{instance}/ then 
 				
-				# Display local instance
-				instance = service.gsub(/SQL Server \(/, "").gsub(/\)/, "").lstrip.rstrip
-				print_good("SQL Server service instance found: #{instance}")				
-				return 1
+					# Display user defined instance				
+					print_good("SQL Server instance found: #{instance}")				
+					return 1
+				end
 			end
 		end		
 		
 		# Fail
-		print_error("SQL Server instance NOT found")		
+		if instance == "" then	
+			print_error("SQL Server instance NOT found")		
+		else
+			print_error("SQL Server instance \"#{instance}\" was NOT found")		
+		end
 		return 0
 	end
 
