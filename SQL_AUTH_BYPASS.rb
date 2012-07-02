@@ -35,10 +35,11 @@ class Metasploit3 < Msf::Post
 	end
 	
 	# TODO
-	# - Test all options on all SQL Server 2k to 2k12	
+	# - Test all options on all SQL Server 2k to 2k12 - local system only has public
+    # - rewrite to migrate to sql service instead of dropping to system.	
 
 	def run
-			
+				
 		# Set verbosity level
 		verbose = datastore['_verbose'].to_s.downcase 
 		
