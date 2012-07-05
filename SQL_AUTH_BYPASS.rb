@@ -40,6 +40,7 @@ class Metasploit3 < Msf::Post
 	
 	# TODO
 	# - rewrite impersonation module to target non system sqlservr.exe services
+	# - fix osql/sqlcmd syntax for sql server 2012
 	# - update verbose stuff	
 	# - test all fucntions on all version
 	# - run through ruby module validation process
