@@ -122,9 +122,9 @@ class Metasploit3 < Msf::Post
 	end
 	
 	
-	##
+	## ----------------------------------------------
 	## Method to check if the SQL Server service is running
-	##
+	## ----------------------------------------------
 	def check_for_sqlserver(instance)
 	
 		print_status("Checking for SQL Server...") 
