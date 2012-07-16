@@ -36,6 +36,10 @@ class Metasploit3 < Msf::Auxiliary
 		# Setup first server
 		links_to_crawl = getstartdata(verbose)
 		
+		# Debugging information
+		print_status("Hash exported by first method:") if verbose == "true"
+		links_to_crawl.each do |link| print_status("#{link}") end if verbose == "true"	
+		
 		# Crawl database links
 		crawl_db_links(links_to_crawl,verbose)
 			
@@ -73,7 +77,8 @@ class Metasploit3 < Msf::Auxiliary
 		}
 		disconnect
 		
-		# Debugging info	
+		# Debugging information	
+		print_status("Hash defined in first method for initial target:") if verbose == "true"
 		links_to_crawl.each do |link| print_status("#{link}") end if verbose == "true"		
 	
 		# Return hash containing data from first db
@@ -84,18 +89,26 @@ class Metasploit3 < Msf::Auxiliary
 	## Recursive function to crawl database links
 	##
 	def crawl_db_links(links_to_crawl,verbose)
+		
+		# Debugging information
+		print_status("Hash imported to recursive function from first method:") if verbose == "true"
+		links_to_crawl.each do |link| print_status("#{link}") end if verbose == "true"	
 	
 		# Check if there are any linked servers to crawl
+		if links_to_crawl.empty?.to_s == "true" then
+			print_status("No more database links to crawl")
+		else
+			print_status("Attempting to crawl database links...")
+			# Set target linked server
+			
+			# Get data from target linked server
+			
+			# Add linked servers from target linked server to links_to_crawl
+			
 		
-		# Set target linked server
-		
-		# Get data from target linked server
-		
-		# Add linked servers from target linked server to links_to_crawl
-		
-	
-		# Crawl links if there are any left to crawl
-		# crawl_db_links(dbs_to_crawl) if links exist
+			# Crawl links if there are any left to crawl
+			# crawl_db_links(links_to_crawl) if links exist
+		end
 	end
 	
 end
