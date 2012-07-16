@@ -8,13 +8,13 @@ class Metasploit3 < Msf::Auxiliary
 
 	def initialize(info = {})
 		super(update_info(info,
-			'Name'           => 'Microsoft SQL Server - Find and Sample Data',
-			'Description'    => %q{Crawl SQL Server DB Links.},
-			'Author'         => [ 'Scott and Antti' ],
-			'Version'        => '$Revision: 12196 $',
+			'Name'           => 'Microsoft SQL Server - Crawl Database Server Links',
+			'Description'    => %q{This will crawl SQL Server database links with provide 
+			provide credentials.},
+			'Author'        => [ 'Scott Sutherland <scott.sutherland@netspi.com>'],
+			'Platform'      => [ 'Windows' ],
 			'License'        => MSF_LICENSE,
 			'References'     => [[ 'URL', 'http://www.netspi.com/blog/author/ssutherland/' ]],
-			'Targets'        => [[ 'MSSQL 2005', { 'ver' => 2005 }]]
 		))
 
 		register_options(
@@ -47,7 +47,7 @@ class Metasploit3 < Msf::Auxiliary
 	
 	
 	##
-	## Get initial data from server
+	## Method of getting initial data from target SQL Server
 	##
 	def getstartdata(verbose)
 	
@@ -86,7 +86,7 @@ class Metasploit3 < Msf::Auxiliary
 	end
 	
 	##
-	## Recursive function to crawl database links
+	## Method (recursive) for crawling database links
 	##
 	def crawl_db_links(links_to_crawl,verbose)
 		
@@ -99,15 +99,38 @@ class Metasploit3 < Msf::Auxiliary
 			print_status("No more database links to crawl")
 		else
 			print_status("Attempting to crawl database links...")
-			# Set target linked server
 			
-			# Get data from target linked server
+			# Iterate through each hash
 			
-			# Add linked servers from target linked server to links_to_crawl
-			
-		
-			# Crawl links if there are any left to crawl
-			# crawl_db_links(links_to_crawl) if links exist
+				# Set path seperator character
+				
+				# Set target server/path to be processed
+				
+				# Get link depth for target server, if not set	
+				
+				# Setup number of ticks for openquery nesting
+				
+				# Setup inside query to get data from target server	
+				
+				# Generate left side of query
+				
+				# Generate right side of query
+
+				# Generate full query to be executed
+				
+				# Connect to initial database entry point and execute query
+				
+					# Get list of links, for each link
+						
+						# If link does not exist in links_to_crawl or links_crawled then
+						
+							# Add link to links_to_crawl if it does not exist
+							
+							#Update link hash info using data from sql query 
+				
+				# Remove current target from links_to_crawl
+
+			# crawl_db_links(links_to_crawl) if links_to_crawl is not empty
 		end
 	end
 	
