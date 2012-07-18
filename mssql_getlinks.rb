@@ -149,26 +149,14 @@ class Metasploit3 < Msf::Auxiliary
 				links_crawled.each do |link| print_status("link: #{link}") end if verbose == "true"	
 				
 				# Remove current target server from links_to_crawl
-				#links_crawled.del if dbs_to_crawl.include? "#{linkpath}"	
-				print_status("linkpath: #{dbsrv_hash['linkpath']}")
-				links_to_crawl.each {|serverinfo,servervalue|	
+				if links_to_crawl.include? temp_hash then
+					print_status("Current hash target found in links_to_crawl!")
+					killindex = links_to_crawl.index(temp_hash)	
+					links_to_crawl.delete_at(killindex)
 					
-					print_good("server info: #{serverinfo}, Value: #{servervalue}")
-				
-					serverinfo.each {|key,value|
-						if key == "linkpath" and value == "#{dbsrv_hash['linkpath']}" then
-							print_status("KEY: #{key}, Value: #{value}")
-							
-							# Setup links_to_crawl key to be deleted
-							
-							
-							# Delete links_to_crawl key
-							
-							# or delete the current (first) entry in the hash array
-							
-						end
-					}
-				}
+				else
+					print_status("not there!")
+				end
 				
 				# Debugging information	
 				print_status("Links to crawl:") if verbose == "true"
