@@ -22,20 +22,13 @@ class Metasploit3 < Msf::Auxiliary
 				OptBool.new('VERBOSE',  [false, 'Set how verbose the output should be', 'false']),				
 			], self.class)
 	end
-
-	
-	def print_with_underline(str)
-		print_line(str)
-		print_line("=" * str.length)
-	end
-
 	
 	def run_host(ip)
 		
 		# Set verbosity
 		verbose = datastore['verbose'].to_s.downcase 
 		
-		# Crate primary array
+		# Create primary arrays
 		links_to_crawl= Array.new 	
 		links_crawled= Array.new 	
 		
