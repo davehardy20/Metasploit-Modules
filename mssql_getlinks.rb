@@ -49,7 +49,7 @@ class Metasploit3 < Msf::Auxiliary
 	## Method of getting initial data from target SQL Server
 	##
 	def getstartdata(ip,links_to_crawl,verbose)
-			
+		
 		# GET INFORMATION FROM CURRENT DATABASE
 		# SETUP QUERY
 		sql = "SELECT @@servername as server,
@@ -107,12 +107,14 @@ class Metasploit3 < Msf::Auxiliary
 				print_status("---------------------------------------------------------------")
 				print_status("Processing: #{dbsrv_hash['server']} : #{dbsrv_hash['sysadmin']} : #{dbsrv_hash['version']} : #{dbsrv_hash['linkpath']} : #{dbsrv_hash['parent']}")				
 				
+				# Set target server/path to be processed
+				oserver_path = dbsrv_hash['linkpath']
+				
 				# Set path seperator character
 				
-				# Set target server/path to be processed
 				
-				# Get link depth for target server, if not set	
-				
+				# Get link depth for target server, if not set	- fix this
+							
 				# Setup number of ticks for openquery nesting
 				
 				# Setup inside query to get data from target server	
@@ -143,7 +145,7 @@ class Metasploit3 < Msf::Auxiliary
 				
 				# Remove current target server from links_to_crawl
 				if links_to_crawl.include? temp_hash then
-					print_status("Current hash target found in links_to_crawl!")
+					print_status("Current hash target found in links_to_crawl!") if verbose == "true"
 					killindex = links_to_crawl.index(temp_hash)	
 					links_to_crawl.delete_at(killindex)
 					
@@ -155,8 +157,10 @@ class Metasploit3 < Msf::Auxiliary
 				print_status("Links to crawl:") if verbose == "true"
 				links_to_crawl.each do |link| print_status("link: #{link}") end if verbose == "true"	
 			}
-			
-			# crawl_db_links(links_to_crawl) if links_to_crawl is not empty
+			print_status("---------------------------------------------------------------")
+			print_status("SQL servers crawled: #{links_crawled.count}")
+			print_status("SQL sysadmin links: PENDING")
+			print_status("---------------------------------------------------------------")
 		end
 	end
 	
