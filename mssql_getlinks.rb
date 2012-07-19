@@ -218,25 +218,7 @@ class Metasploit3 < Msf::Auxiliary
 
 					return
 				end		
-				disconnect			
-				
-				##-----------------------
-				
-				# Generate left side of query
-				
-				# Generate right side of query
-
-				# Generate full query to be executed
-				
-				# Connect to initial database entry point and execute query
-				
-					# Get list of links, for each link
-						
-						# If link does not exist in links_to_crawl or links_crawled then
-						
-							
-							
-							#Update link hash info using data from sql query 
+				disconnect							
 				
 				# Add current target server to links_crawled
 				temp_hash = Hash['server'=>"#{dbsrv_hash['server']}",'sysadmin'=>"#{dbsrv_hash['sysadmin']}",'version'=>"#{dbsrv_hash['version']}",'linkpath'=>"#{dbsrv_hash['linkpath']}",'parent'=>"#{dbsrv_hash['parent']}"]
