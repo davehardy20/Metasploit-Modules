@@ -41,6 +41,12 @@ class Metasploit3 < Msf::Auxiliary
 		
 		# Crawl database links
 		crawl_db_links(links_to_crawl,links_crawled,verbose)
+		
+		# Report high level findings
+		print_status("---------------------------------------------------------------")
+		print_status("SQL servers crawled: #{links_crawled.count}")
+		print_status("SQL sysadmin links: PENDING")
+		print_status("---------------------------------------------------------------")
 			
 	end
 	
@@ -111,13 +117,110 @@ class Metasploit3 < Msf::Auxiliary
 				oserver_path = dbsrv_hash['linkpath']
 				
 				# Set path seperator character
-				
+				oserver_pathdelim = ' > ' if oserver_path > ''
 				
 				# Get link depth for target server, if not set	- fix this
-							
-				# Setup number of ticks for openquery nesting
+				current_linkpath = dbsrv_hash['linkpath'].split(" > ")
+				current_linkdepth = dbsrv_hash['linkpath'].split(" > ").count-1
+				print_status("Linkpath depth: #{current_linkdepth}")	
 				
+				# Setup number of ticks for openquery nesting
+				rightside = ''
+				leftside = ''		
+				thecount = 0 #use for generating ticks
+				
+				## Set inside query to be run on all links
+				sql_inside = "SELECT @@servername as server,
+					(select is_srvrolemember('sysadmin')) as sysadmin,
+					(REPLACE(REPLACE(REPLACE(ltrim((select REPLACE((Left(@@Version,CHARINDEX('-',@@version)-1)),'Microsoft','')+ 
+					rtrim(CONVERT(char(30), SERVERPROPERTY('Edition'))) +' '+ 
+					RTRIM(CONVERT(char(20), SERVERPROPERTY('ProductLevel')))+ 
+					CHAR(10))), CHAR(10), ''), CHAR(13), ''), CHAR(9), '')) as version,
+					'#{oserver_path}'+'#{oserver_pathdelim}'+@@Servername+' > '+srvname as linkpath
+					FROM master..sysservers 
+					WHERE 
+					srvname not like @@SERVERNAME and 
+					providername = 'SQLOLEDB' and 
+					dataaccess = '1'"	
+				
+				# Create the sql statement based on link depth
+				if current_linkdepth > 0
+				
+					#create left side
+					current_linkpath.each {|link|
+							thecount = thecount + 1
+							ticks = "'" * (thecount * thecount)
+							print leftside
+							leftside << "select server,sysadmin,version,linkpath from openquery(\"#{link}\",#{ticks}"										
+					}
+					
+					#create right side
+					current_linkpath.each {|link|	
+							ticks = "'" * (thecount * thecount)
+							rightside << "#{ticks}\")"										
+					}
+					
+					#concat sider for full query
+					
+				else
+					sql = sql_inside
+				end
+								
 				# Setup inside query to get data from target server	
+				ql_inside = "SELECT @@servername as server,
+					(select is_srvrolemember('sysadmin')) as sysadmin,
+					(REPLACE(REPLACE(REPLACE(ltrim((select REPLACE((Left(@@Version,CHARINDEX('-',@@version)-1)),'Microsoft','')+ 
+					rtrim(CONVERT(char(30), SERVERPROPERTY('Edition'))) +' '+ 
+					RTRIM(CONVERT(char(20), SERVERPROPERTY('ProductLevel')))+ 
+					CHAR(10))), CHAR(10), ''), CHAR(13), ''), CHAR(9), '')) as version,
+					'#{oserver_path}'+'#{oserver_pathdelim}'+@@Servername+' > '+srvname as linkpath
+					FROM master..sysservers 
+					WHERE 
+					srvname not like @@SERVERNAME and 
+					providername = 'SQLOLEDB' and 
+					dataaccess = '1'"
+				
+				# Build final query
+				sql = "
+				SELECT
+				srvname,
+				'sysadmin',
+				'version',
+				'#{oserver_path}'+'#{oserver_pathdelim}'+@@Servername+' > '+srvname 
+				FROM master..sysservers 
+				WHERE 
+				srvname not like @@SERVERNAME and 
+				providername = 'SQLOLEDB' and 
+				dataaccess = '1'"
+				
+				##
+				## Connect to database and process query target server
+				##
+				begin
+						result = mssql_query(sql, false) if mssql_login_datastore
+						column_data = result[:rows]
+						
+						#Process each link on the target server
+						column_data.each {|server,sysadmin,version,linkpath|
+						
+							# Print information for newly identified  link 
+							print_status("FOUND LINK: #{server} : #{sysadmin} : #{version} : #{linkpath}")
+							
+							# Build hash record for link
+							addthislink = Hash['server'=>"#{server}",'sysadmin'=>'unknown','version'=>'unknown','linkpath'=>"#{linkpath},'parent'=>#{dbsrv_hash['parent']}"]
+							
+							# Add to link_to_crawl queue
+							links_to_crawl << addthislink															
+																
+						}								
+					rescue
+						print_line("[-] ERROR : There was a problem with #{rhost}:#{rport}.")
+
+					return
+				end		
+				disconnect			
+				
+				##-----------------------
 				
 				# Generate left side of query
 				
@@ -156,12 +259,7 @@ class Metasploit3 < Msf::Auxiliary
 				# Debugging information	
 				print_status("Links to crawl:") if verbose == "true"
 				links_to_crawl.each do |link| print_status("link: #{link}") end if verbose == "true"	
-			}
-			print_status("---------------------------------------------------------------")
-			print_status("SQL servers crawled: #{links_crawled.count}")
-			print_status("SQL sysadmin links: PENDING")
-			print_status("---------------------------------------------------------------")
-		end
-	end
-	
+			}		
+		end		
+	end	
 end
