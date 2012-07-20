@@ -97,31 +97,34 @@ class Metasploit3 < Msf::Auxiliary
 	def crawl_db_links(links_to_crawl,links_crawled,verbose)
 		
 		# Debugging information
-		print_status("Hash imported to recursive function from first method:") if verbose == "true"
-		links_to_crawl.each do |link| print_status("#{link}") end if verbose == "true"	
+		#print_status("Hash imported to recursive function from first method:") if verbose == "true"
+		#links_to_crawl.each do |link| print_status("#{link}") end if verbose == "true"	
 	
 		# Check if there are any linked servers to crawl
 		if links_to_crawl.empty?.to_s == "true" then
 			print_status("No more database links to crawl")
-		else
-			print_status("Attempting to crawl database links...")
+		else					
 			
 			# Iterate through each hash
 			links_to_crawl.map {|dbsrv_hash| 						
 				
 				# Statusing
 				print_status("---------------------------------------------------------------")
-				print_status("Processing: #{dbsrv_hash['server']} : #{dbsrv_hash['sysadmin']} : #{dbsrv_hash['version']} : #{dbsrv_hash['linkpath']} : #{dbsrv_hash['parent']}")				
+				print_status("Search for linked servers on #{dbsrv_hash['server']}...")
+				print_status("Target hash: #{dbsrv_hash['server']} : #{dbsrv_hash['sysadmin']} : #{dbsrv_hash['version']} : #{dbsrv_hash['linkpath']} : #{dbsrv_hash['parent']}")				
 				
 				# Set target server/path to be processed
 				oserver_path = dbsrv_hash['linkpath']
 				
+				# Set delim character
+				mydelim = ">"
+				
 				# Set path seperator character
-				oserver_pathdelim = ' > ' if oserver_path > ''
+				oserver_pathdelim = " #{mydelim} " if oserver_path > ""
 				
 				# Get link depth for target server, if not set	- fix this
 				current_linkpath = dbsrv_hash['linkpath'].split(" > ")
-				current_linkdepth = dbsrv_hash['linkpath'].split(" > ").count-1
+				current_linkdepth = dbsrv_hash['linkpath'].scan(/>/).count
 				print_status("Linkpath depth: #{current_linkdepth}")	
 				
 				# Setup number of ticks for openquery nesting
@@ -156,7 +159,7 @@ class Metasploit3 < Msf::Auxiliary
 					
 					#create right side
 					current_linkpath.each {|link|	
-							ticks = "'" * (thecount * thecount)
+							ticks = "'" * (thecount * 2)
 							rightside << "#{ticks}\")"										
 					}
 					
@@ -207,14 +210,14 @@ class Metasploit3 < Msf::Auxiliary
 							print_status("FOUND LINK: #{server} : #{sysadmin} : #{version} : #{linkpath}")
 							
 							# Build hash record for link
-							addthislink = Hash['server'=>"#{server}",'sysadmin'=>'unknown','version'=>'unknown','linkpath'=>"#{linkpath},'parent'=>#{dbsrv_hash['parent']}"]
+							addthislink = Hash['server'=>"#{server}",'sysadmin'=>'unknown','version'=>'unknown','linkpath'=>"#{linkpath}",'parent'=>"#{dbsrv_hash['server']}"]
 							
 							# Add to link_to_crawl queue
 							links_to_crawl << addthislink															
 																
 						}								
 					rescue
-						print_line("[-] ERROR : There was a problem with #{rhost}:#{rport}.")
+						print_error("ERROR: There was a problem with #{rhost}:#{rport}.")
 
 					return
 				end		
@@ -232,15 +235,24 @@ class Metasploit3 < Msf::Auxiliary
 				if links_to_crawl.include? temp_hash then
 					print_status("Current hash target found in links_to_crawl!") if verbose == "true"
 					killindex = links_to_crawl.index(temp_hash)	
+					killindex = links_to_crawl.index(temp_hash)	
 					links_to_crawl.delete_at(killindex)
 					
 				else
 					print_status("not there!")
 				end
 				
-				# Debugging information	
-				print_status("Links to crawl:") if verbose == "true"
-				links_to_crawl.each do |link| print_status("link: #{link}") end if verbose == "true"	
+				# Continue to crawl if links_to_crawl array is not empty
+				if links_to_crawl.empty? then 
+					print_status("No more links to crawl")
+				else
+					# Debugging information	
+					print_status("Links left to crawl:") if verbose == "true"
+					links_to_crawl.each do |link| print_status("link: #{link}") end if verbose == "true"
+					
+					# add call to recusive funciton here
+					crawl_db_links(links_to_crawl,links_crawled,verbose)
+				end
 			}		
 		end		
 	end	
