@@ -110,7 +110,7 @@ class Metasploit3 < Msf::Auxiliary
 				
 				# Statusing
 				print_status("---------------------------------------------------------------")
-				print_status("Search for linked servers on #{dbsrv_hash['server']}...")
+				print_status("Searching for linked servers on #{dbsrv_hash['server']}...")
 				print_status("Target hash: #{dbsrv_hash['server']} : #{dbsrv_hash['sysadmin']} : #{dbsrv_hash['version']} : #{dbsrv_hash['linkpath']} : #{dbsrv_hash['parent']}")				
 				
 				# Set target server/path to be processed
@@ -125,14 +125,14 @@ class Metasploit3 < Msf::Auxiliary
 				# Get link depth for target server, if not set	- fix this
 				current_linkpath = dbsrv_hash['linkpath'].split(" > ")
 				current_linkdepth = dbsrv_hash['linkpath'].scan(/>/).count
-				print_status("Linkpath depth: #{current_linkdepth}")	
+				print_status("Link path depth: #{current_linkdepth}")	
 				
 				# Setup number of ticks for openquery nesting
 				rightside = ''
 				leftside = ''		
-				thecount = 0 #use for generating ticks
+				thecount = 0 #use for generating ticks				
 				
-				## Set inside query to be run on all links
+				# Setup inside query to get data from target server	
 				sql_inside = "SELECT @@servername as server,
 					(select is_srvrolemember('sysadmin')) as sysadmin,
 					(REPLACE(REPLACE(REPLACE(ltrim((select REPLACE((Left(@@Version,CHARINDEX('-',@@version)-1)),'Microsoft','')+ 
@@ -144,7 +144,7 @@ class Metasploit3 < Msf::Auxiliary
 					WHERE 
 					srvname not like @@SERVERNAME and 
 					providername = 'SQLOLEDB' and 
-					dataaccess = '1'"	
+					dataaccess = '1'"
 				
 				# Create the sql statement based on link depth
 				if current_linkdepth > 0
@@ -167,34 +167,7 @@ class Metasploit3 < Msf::Auxiliary
 					
 				else
 					sql = sql_inside
-				end
-								
-				# Setup inside query to get data from target server	
-				ql_inside = "SELECT @@servername as server,
-					(select is_srvrolemember('sysadmin')) as sysadmin,
-					(REPLACE(REPLACE(REPLACE(ltrim((select REPLACE((Left(@@Version,CHARINDEX('-',@@version)-1)),'Microsoft','')+ 
-					rtrim(CONVERT(char(30), SERVERPROPERTY('Edition'))) +' '+ 
-					RTRIM(CONVERT(char(20), SERVERPROPERTY('ProductLevel')))+ 
-					CHAR(10))), CHAR(10), ''), CHAR(13), ''), CHAR(9), '')) as version,
-					'#{oserver_path}'+'#{oserver_pathdelim}'+@@Servername+' > '+srvname as linkpath
-					FROM master..sysservers 
-					WHERE 
-					srvname not like @@SERVERNAME and 
-					providername = 'SQLOLEDB' and 
-					dataaccess = '1'"
-				
-				# Build final query
-				sql = "
-				SELECT
-				srvname,
-				'sysadmin',
-				'version',
-				'#{oserver_path}'+'#{oserver_pathdelim}'+@@Servername+' > '+srvname 
-				FROM master..sysservers 
-				WHERE 
-				srvname not like @@SERVERNAME and 
-				providername = 'SQLOLEDB' and 
-				dataaccess = '1'"
+				end														
 				
 				##
 				## Connect to database and process query target server
@@ -207,7 +180,7 @@ class Metasploit3 < Msf::Auxiliary
 						column_data.each {|server,sysadmin,version,linkpath|
 						
 							# Print information for newly identified  link 
-							print_status("FOUND LINK: #{server} : #{sysadmin} : #{version} : #{linkpath}")
+							print_good("FOUND LINK: #{server} : unknown : unknown : #{linkpath} : #{dbsrv_hash['server']}")
 							
 							# Build hash record for link
 							addthislink = Hash['server'=>"#{server}",'sysadmin'=>'unknown','version'=>'unknown','linkpath'=>"#{linkpath}",'parent'=>"#{dbsrv_hash['server']}"]
