@@ -111,6 +111,7 @@ class Metasploit3 < Msf::Auxiliary
 				# Statusing
 				print_status("---------------------------------------------------------------")
 				print_status("Searching for linked servers on #{dbsrv_hash['server']}...")
+				print_status("---------------------------------------------------------------")
 				print_status("Target hash: #{dbsrv_hash['server']} : #{dbsrv_hash['sysadmin']} : #{dbsrv_hash['version']} : #{dbsrv_hash['linkpath']} : #{dbsrv_hash['parent']}")				
 				
 				# Set target server/path to be processed
@@ -123,82 +124,162 @@ class Metasploit3 < Msf::Auxiliary
 				oserver_pathdelim = " #{mydelim} " if oserver_path > ""
 				
 				# Get link depth for target server, if not set	- fix this
-				current_linkpath = dbsrv_hash['linkpath'].split(" > ")
-				current_linkdepth = dbsrv_hash['linkpath'].scan(/>/).count
+				current_linkpath = dbsrv_hash['linkpath'].split(" #{mydelim} ")
+				current_linkdepth = dbsrv_hash['linkpath'].scan(/#{mydelim}/).count		
 				print_status("Link path depth: #{current_linkdepth}")	
+		
 				
+				##	------------------------------------------------
+				## Get configuration information from current target 
+				##	------------------------------------------------
 				# Setup number of ticks for openquery nesting
 				sql_right = ''
-				sql_left = ''		
-				thecount = 0 #use for generating ticks				
+				sql_left = ''									
+				ticks = "" 
 				
-				# Setup inside query to get data from target server	
-				sql_center = "SELECT @@servername as server,
+				# Create the sql statement based on link depth
+				if current_linkdepth > 0 then
+					
+					counter=0
+					
+					# Create left and right sides of query
+					current_linkpath.shift #Get rid of entry point for loop
+					print_status("Current link path: #{current_linkpath}")					
+					current_linkpath.each {|link|
+														
+							counter = counter+1
+							
+							if ticks == "" then 
+								ticks = "'"	
+							else
+								ticks = ticks * 2
+							end
+							
+							# Create left side - create open query on left side
+							sql_left << "select server,sysadmin,version from openquery(\"#{dbsrv_hash['server']}\",#{ticks}"
+							
+												
+							# Create right side - create where filter statements on right side
+							sql_right << "#{ticks})"
+					}
+					
+					centerticks = ticks * 2					
+					
+					# Create center query
+					sql_center = "SELECT @@servername as server,
 					(select is_srvrolemember('sysadmin')) as sysadmin,
 					(REPLACE(REPLACE(REPLACE(ltrim((select REPLACE((Left(@@Version,CHARINDEX('-',@@version)-1)),'Microsoft','')+ 
 					rtrim(CONVERT(char(30), SERVERPROPERTY('Edition'))) +' '+ 
 					RTRIM(CONVERT(char(20), SERVERPROPERTY('ProductLevel')))+ 
-					CHAR(10))), CHAR(10), ''), CHAR(13), ''), CHAR(9), '')) as version,
-					'#{oserver_path}'+'#{oserver_pathdelim}'+@@Servername+' > '+srvname as linkpath
+					CHAR(10))), CHAR(10), ''), CHAR(13), ''), CHAR(9), '')) as version"
+												
+					sql_center = sql_center.to_s.gsub( "'","#{centerticks}") 
+				
+					sql = "#{sql_left.lstrip.rstrip }#{sql_center.lstrip.rstrip } #{sql_right.lstrip.rstrip }"
+					
+				else
+					sql = "SELECT @@servername as server,
+					(select is_srvrolemember('sysadmin')) as sysadmin,
+					(REPLACE(REPLACE(REPLACE(ltrim((select REPLACE((Left(@@Version,CHARINDEX('-',@@version)-1)),'Microsoft','')+ 
+					rtrim(CONVERT(char(30), SERVERPROPERTY('Edition'))) +' '+ 
+					RTRIM(CONVERT(char(20), SERVERPROPERTY('ProductLevel')))+ 
+					CHAR(10))), CHAR(10), ''), CHAR(13), ''), CHAR(9), '')) as version"
+				end												
+				
+			
+				print_status("Get configuratoin query:\n #{sql}")
+				print_status("Getting configuraiton data...")
+				result = mssql_query(sql, false) if mssql_login_datastore
+				column_data = result[:rows]
+						
+				print_status("sql results: #{column_data}")	
+				
+				#Process each row from query
+				column_data.each {|line|
+					print_status("line: #{line}")
+					
+					#!blah - update hash here
+				}										
+				disconnect	
+				
+			
+				##	------------------------------------------------
+				## Get linked servers from the target 
+				##	------------------------------------------------
+				
+				# Setup number of ticks for openquery nesting
+				sql_right = ''
+				sql_left = ''						
+				ticks = "" 
+				
+				# Create the sql statement based on link depth
+				if current_linkdepth > 0 then
+					
+					counter=0
+					
+					# Create left and right sides of query
+					#current_linkpath.shift #Get rid of entry point for loop
+					print_status("Current link path: #{current_linkpath}")					
+					current_linkpath.each {|link|
+														
+							counter = counter+1
+							
+							if ticks == "" then 
+								ticks = "'"	
+							else
+								ticks = ticks * 2
+							end
+							
+							# Create left side - create open query on left side
+							sql_left << "select server,linkpath from openquery(\"#{dbsrv_hash['server']}\",#{ticks}"
+							
+												
+							# Create right side - create where filter statements on right side
+							sql_right << "#{ticks})"
+					}
+					
+					centerticks = ticks * 2					
+					
+					# Create center query
+					sql_center = "
+					SELECT
+					srvname as server,
+					'#{oserver_path}'+'#{oserver_pathdelim}'+srvname as linkpath
 					FROM master..sysservers 
 					WHERE 
 					srvname not like @@SERVERNAME and 
 					providername = 'SQLOLEDB' and 
 					dataaccess = '1'"
+					
+					sql_center = sql_center.to_s.gsub( "'","#{centerticks}") 
 				
-				# Create the sql statement based on link depth
-				if current_linkdepth > 0
-				
-					#create left side - create open query on left side
-					current_linkpath.shift #Get rid of entry point for loop
-					print_status("Current link path: \n #{current_linkpath}")
-					
-					current_linkpath.each {|link|
-							thecount = thecount + 1
-							ticks = "'" * (thecount * thecount)
-							sql_left << "select server,sysadmin,version,linkpath from openquery(\"#{dbsrv_hash['server']}\",#{ticks}"										
-					}
-					
-					#create right side - create where filter statements on right side
-					current_linkpath.each {|link|	
-							ticks = "'" * (thecount * 2)
-							sql_right << "#{ticks}\")"										
-					}
-					
-					#Build final query from sql_right, sql_left, and sql_center
-					sql = "#{sql_left} #{sql_center} #{sql_right}"
-					
+					sql = "#{sql_left.lstrip.rstrip }#{sql_center.lstrip.rstrip } #{sql_right.lstrip.rstrip }"
 				else
 					sql = "
 					SELECT
 					srvname,
-					'unknown',
-					'unknown',
-					'#{oserver_path}'+'#{oserver_pathdelim}'+@@Servername+' > '+srvname 
+					'#{oserver_path}'+'#{oserver_pathdelim}'+ @@Servername +' > '+srvname as linkpath
 					FROM master..sysservers 
 					WHERE 
 					srvname not like @@SERVERNAME and 
 					providername = 'SQLOLEDB' and 
 					dataaccess = '1'"
 				end
-										
 				
-				print_status("QUERY:\n #{sql}")
+				print_status("Get links query:\n #{sql}")
 				
-				
-				##
-				## Connect to database and process query target server
-				##
+
+				## Connect to database and process query target server for data
 				result = mssql_query(sql, false) if mssql_login_datastore
 				column_data = result[:rows]
 						
 				print_status("sql results: #{column_data}")	
 				
 				#Process each link on the target server
-				column_data.each {|server,sysadmin,version,linkpath|
+				column_data.each {|server,linkpath|
 						
 					# Print information for newly identified  link 
-					print_good("FOUND LINK: #{server} : unknown : unknown : #{linkpath} : #{dbsrv_hash['server']}")
+					print_good("FOUND LINK: #{linkpath}")
 							
 					# Build hash record for link
 					addthislink = Hash['server'=>"#{server}",'sysadmin'=>'unknown','version'=>'unknown','linkpath'=>"#{linkpath}",'parent'=>"#{dbsrv_hash['server']}"]
