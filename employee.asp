@@ -28,34 +28,31 @@ Dim oConn, oRs
 Dim qry, connectstr
 Dim db_name, db_username, db_userpassword
 Dim db_server
-Dim my_search
+Dim myid
 
-id = Request("id")
-db_server = "localhost"
-db_name = "AdventureWorks"
-tablename = "HumanResources.Employee"
-db_username = "srv1user"
-db_userpassword = "srv1password"
-fieldname = "LoginID"
+' update the db_server with your server and instance
+db_server = "mybox\server1"
+db_name = "AdventureWorks2008"
+db_username = "s1user"
+db_password = "s1password"
 
-
-connectstr = "Driver={SQL Server};SERVER=" & db_server & ";DATABASE=" & db_name & ";UID=" & db_username & ";PWD=" & db_userpassword
-
+'setup database handler
 Set oConn = Server.CreateObject("ADODB.Connection")
-oConn.Open connectstr
- 
-'standard search query
-qry = "SELECT * FROM " & tablename & " WHERE EmployeeID = " & Request("id")
-'qry = "SELECT * FROM " & tablename
+oConn.Open("Driver={SQL Server};Server=" & db_server & ";Database=" & db_name &";UID=" & db_username & ";PWD=" & db_password & ";Trusted_Connection=NO;")
 
+'setup query
+qry = "SELECT * FROM HumanResources.Employee WHERE BusinessEntityID = " & Request("eid")
+
+'execute query
 Set oRS = oConn.Execute(qry)
 
+'loop through and display records
 Do until oRs.EOF
 
-   Response.Write "<strong>ID:</strong>&nbsp;" & oRs.Fields("EmployeeID") & "<br>"
-   Response.Write "<strong>Title:&nbsp;</strong>" & oRs.Fields("title") & "<br>"
-   Response.Write "<strong>User:&nbsp;</strong>" & oRs.Fields(fieldname) & "<br>"
-   Response.Write "<strong>Birth Date:&nbsp;</strong>" & oRs.Fields("birthdate") & "<br>"
+   Response.Write "<strong>ID:</strong>&nbsp;" & oRs.Fields("BusinessEntityID") & "<br>"
+   Response.Write "<strong>Title:&nbsp;</strong>" & oRs.Fields("JobTitle") & "<br>"
+   Response.Write "<strong>User:&nbsp;</strong>" & oRs.Fields("LoginID") & "<br>"
+   Response.Write "<strong>Birth Date:&nbsp;</strong>" & oRs.Fields("BirthDate") & "<br>"
 
    oRS.MoveNext
 Loop

@@ -26,35 +26,34 @@
 <%
 
 'Sample Database Connection Syntax for ASP and SQL Server.
-
 Dim oConn, oRs
 Dim qry, connectstr
 Dim db_name, db_username, db_userpassword
 Dim db_server
 Dim my_search
 
-my_search = Request("search")
-db_server = "Localhost"
-db_name = "AdventureWorks"
-db_username = "srv1user"
-db_userpassword = "srv1password"
-fieldname = "LoginID"
-tablename = "HumanResources.Employee"
+' update the db_server with your server and instance
+db_server = "mybox\server1"
+db_name = "AdventureWorks2008"
+db_username = "s1user"
+db_password = "s1password"
 
-connectstr = "Driver={SQL Server};SERVER=" & db_server & ";DATABASE=" & db_name & ";UID=" & db_username & ";PWD=" & db_userpassword
-
+'setup database handler
 Set oConn = Server.CreateObject("ADODB.Connection")
-oConn.Open connectstr
- 
-'standard search query
-qry = "SELECT * FROM " & tablename & " WHERE LoginID LIKE '%" & Request("search") & "%'"
+oConn.Open("Driver={SQL Server};Server=" & db_server & ";Database=" & db_name &";UID=" & db_username & ";PWD=" & db_password & ";Trusted_Connection=NO;")
 
+'setup query
+qry = "SELECT LoginID,BusinessEntityID FROM HumanResources.Employee WHERE LoginID LIKE '%" & Request("search") & "%'"
+
+'execute query
 Set oRS = oConn.Execute(qry)
 
-   Response.Write "<strong>Search Results for:</strong>&nbsp;" & Request("search") & "<br>"
+'output status to user
+Response.Write "<strong>Search Results for:</strong>&nbsp;" & Request("search") & "<br>"
 
+'loop through and print results
 Do until oRs.EOF
-   Response.Write "<a href=/employee.asp?id=" & oRs.Fields("EmployeeID") & ">" & oRs.Fields(fieldname) & "</a><br>"
+   Response.Write "<a href=/employee.asp?id=" & oRs.Fields("BusinessEntityID") & ">" & oRs.Fields("LoginID") & "</a><br>"
    oRS.MoveNext
 Loop
 oRs.Close
